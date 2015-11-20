@@ -19,14 +19,14 @@ import itertools
 
 
 # pymol lib
-try: 
+try:
     from pymol import cmd
     from pymol.cgo import *
 except ImportError:
     print 'Warning: pymol library cmd not found.'
     sys.exit(1)
-    
-# external lib    
+
+# external lib
 try:
     import Pmw
 except ImportError:
@@ -35,7 +35,7 @@ except ImportError:
 
 ## Plugin initialization
 
-#global variables 
+#global variables
 currentDat = []
 modelingRuns = 0
 datViewer = Tkinter.StringVar()
@@ -136,15 +136,15 @@ class TemporaryDirectory:
 
 ## class for GUI
 class SASpy:
-  
+
     def __init__(self, app):
-        
+
         self.parent = app.root
         self.dialog = Pmw.Dialog(self.parent,
-                                 buttons = ('Quit', 
+                                 buttons = ('Quit',
                                  #'Debug',
-                                 'Refresh model list', 
-                                 '3. Execute', 
+                                 'Refresh model list',
+                                 '3. Execute',
                                  '4. View SAXS curve'),
                                  title = 'SASpy - ATSAS Plugin for PyMOL',
                                  command = self.execute)
@@ -166,12 +166,12 @@ class SASpy:
                           text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.0 - ATSAS 2.7.0\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
-        
+
         self.procLabel = Tkinter.Label( self.dialog.interior(),
                                         anchor='w',
                                         text = '1. Choose procedure:')
         self.procLabel.pack(fill='both', expand=True, padx=10, pady=5)
-                                  
+
         #NOTEBOOK START
         self.notebook = Pmw.NoteBook(self.dialog.interior(),raisecommand=self.tabSelection)
         self.notebook.pack(fill = 'both', expand=2, padx=10, pady=10)
@@ -193,7 +193,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         self.crymodebut.setvalue('predict')
 
         saxsfn_ent = Pmw.EntryField(crysolTab,
-                                    label_text = 'SAXS .dat file:', 
+                                    label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
         saxsfn_but = Tkinter.Button(crysolTab, text = 'Browse...',
@@ -204,17 +204,17 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         fn = []
         fn.append('crysol')
         self.notebook.setnaturalsize(pageNames=fn)
-            
+
         #alpraxin tab
         alpraxinTab = self.createTab("alpraxin", "Position a structure such that its principal intertia\nvectors are aligned with the coordinate axis.\nPlease select one model.")
-    
+
         #supcomb tab
         supcombTab = self.createTab('supcomb', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
         #join models tab
         joinTab = self.createTab("createComplex", "Create a complex from selected models.\nPlease provide a name and select models to join.")
         self.newModelName = Tkinter.StringVar();
         newModelNameEntry = Pmw.EntryField(joinTab,
-                                    label_text = 'New complex name:', 
+                                    label_text = 'New complex name:',
                                     labelpos='ws',
                                     entry_textvariable=self.newModelName)
         newModelNameEntry.grid(sticky='we', row=3, column=0, padx=5, pady=5)
@@ -222,7 +222,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         #sasref tab
         sasreftab = self.createTab("sasref", "Quaternary structure modeling against solution scattering data.\nPlease select multiple models (rigid bodies) and a SAXS .dat file.")
         saxsfn_ent = Pmw.EntryField(sasreftab,
-                                    label_text = 'SAXS .dat file:', 
+                                    label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
         saxsfn_but = Tkinter.Button(sasreftab, text = 'Browse...',
@@ -233,7 +233,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         # sreflex tab
         sreflexTab = self.createTab("sreflex", "Model refinement based on SAXS data and normal mode analysis.\nPlease select models and a SAXS .dat file.")
         saxsfn_ent = Pmw.EntryField(sreflexTab,
-                                    label_text = 'SAXS .dat file:', 
+                                    label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
         saxsfn_but = Tkinter.Button(sreflexTab, text = 'Browse...',
@@ -245,7 +245,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         # config tab
         configTab = self.createTab("configure", "Settings available to configure SASpy:")
         svi_ent = Pmw.EntryField(configTab,
-                                    label_text = 'SAXS viewer:', 
+                                    label_text = 'SAXS viewer:',
                                     labelpos='ws',
                                     entry_textvariable = datViewer)
         svi_but = Tkinter.Button(configTab, text = 'Select...',
@@ -266,7 +266,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 
         #Model selection
         self.modsW = self.createModelSelectionWidget()
-        self.modsW.pack(expand=1, fill='both', padx=10, pady=5)        
+        self.modsW.pack(expand=1, fill='both', padx=10, pady=5)
         self.refreshModelSelectionWidget()
 
 
@@ -284,30 +284,30 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                                     labelpos='w',
                                     label_text="2. Model selection:",
                                     selectmode = 'multiple')
-        mols = self.getListOfModels()        
+        mols = self.getListOfModels()
         for m in mols:
             modsW.add(m)
         return modsW
-    
+
     def countSelectedModels(self):
         counter = 0
         ma = self.modsW.getcurselection()
         for m in ma:
             counter += 1
         return counter
-   
+
     def setCrysolMode(self, mode):
         print "Setting crysol mode to "+mode
         self.crysolmode.set(mode)
         self.crymodebut.setvalue(mode)
-        
+
     def setDatMode(self, mode):
         print "Setting open mode to " + mode
         global datmode
         datmode.set(mode)
         self.datmodebut.setvalue(mode)
-        
-       
+
+
     def submitSingleModelJob(self, procType, selection):
         global currentDat
         if "crysol" == procType:
@@ -339,7 +339,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         if running == self.maxThreads:
             self.errorWindow("Max threads exceeded",
                 "A process is already running, please wait for it to complete.")
-            return    
+            return
 
         if 'sasref' == procType:
             t = threading.Thread(target = sasref, name = procType+'_thread', args = (saxsfn, models, viewer))
@@ -363,7 +363,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                 del self.atsasThreads[idx]
                 print "Just removed "+name+" from the list, with index "+repr(idx)
         return threadsAlive
-        
+
     def submitMultiModelJob(self, procType, models = []):
         if "createComplex" == procType:
             self.createComplex(self.newModelName.get(), models)
@@ -379,7 +379,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                 self.submitJobAsThread(procType, models, saxsfn)
         if "supcomb" == procType:
             supcomb(models[0], models[1])
-        return 
+        return
 
     def prepareJobForSubmit(self):
         procType = self.procedure
@@ -399,11 +399,11 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         expected_n = expn_dict[procType]
         if expected_n != 99:
             if expected_n != nModels:
-                self.errorWindow("Wrong number of models selected", 
+                self.errorWindow("Wrong number of models selected",
                 "You selected "+ repr(nModels) +" models, but \'" + procType+"\' expects " + repr(expected_n) + " model(s).\n")
                 return
-            
-       
+
+
         if 0 == nModels:
             self.errorWindow("No model selected", "Please select models")
             return
@@ -419,8 +419,8 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 
 
     def getListOfModels(self):
-        #models can not contain the underscore character '_' 
-        #this is a Pmw limitation, but PyMOL does add such 
+        #models can not contain the underscore character '_'
+        #this is a Pmw limitation, but PyMOL does add such
         #characters often
         initialList = cmd.get_object_list()
         outputList = list();
@@ -449,9 +449,9 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         else:
             self.warnLabel.pack_forget()
         return
-    
+
     def createTab(self, name = 'empty', description = 'empty'):
-        page = self.notebook.add(name)       
+        page = self.notebook.add(name)
         tab_struc = Tkinter.LabelFrame(page, text = name)
         tab_struc.pack(fill='both', expand=True, padx=10, pady=10)
         desc = Tkinter.Label(tab_struc, justify="left", text = description, pady=2)
@@ -463,9 +463,9 @@ Please select one model (and a SAXS .dat file for fit mode).'''
             tkMessageBox.showerror('No curve yet',
                                    'No SAXS intensities have been calculated yet',
                                     parent=self.parent)
-               
+
         else:
-            openDatFile(datViewer.get(), currentDat) 
+            openDatFile(datViewer.get(), currentDat)
         return
 
     def createComplex(self, newName, models = []):
@@ -481,7 +481,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                     pdbfn = writePdb(p)
                     with open(pdbfn, 'r') as rf:
                         for line in rf:
-                            if not line.startswith("END"): 
+                            if not line.startswith("END"):
                                 of.write(line)
             cmd.load(newName+".pdb")
 
@@ -491,7 +491,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
             title='SAXS viewer', initialdir='',
             parent=self.parent)
         datViewer.set(file_name)
-        return  
+        return
 
     def getSAXSFile(self):
         if 'crysol' == self.procedure:
@@ -501,15 +501,15 @@ Please select one model (and a SAXS .dat file for fit mode).'''
             filetypes=[('saxs data files', '*.dat'), ('all files', '*')],
             parent=self.parent)
         self.saxsfn.set(file_name)
-        return  
+        return
 
     def tabSelection(self, pagename):
         self.procedure = pagename
         return
- 
+
     def execute(self, cmd):
         """ Run the cmd represented by the button clicked by user.
-        """        
+        """
         if cmd == 'OK':
             print 'is everything OK?'
 
@@ -520,9 +520,9 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 
         elif cmd == '3. Execute':
             self.prepareJobForSubmit()
-      
+
         elif cmd == '4. View SAXS curve':
-            self.openCurrentDatFile()            
+            self.openCurrentDatFile()
 
         elif cmd == 'Quit':
             self.checkAtsasThreads()
@@ -534,7 +534,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                 self.parent.destroy()
             else:
                 self.dialog.withdraw()
-   
+
         else:
             print 'Terminating SASpy Plugin...'
             self.dialog.withdraw()
@@ -553,7 +553,7 @@ def systemCommand(command, **kwargs):
     return status
 
 def message(text):
-    print "SASpy: "+text 
+    print "SASpy: "+text
     return
 
 def destFile(folder, basename, suffix):
@@ -605,7 +605,7 @@ def fitcrysol(SaxsDataFileName, sel, prefix = defprefix, param = ""):
     return df
 
 #run sreflex
-def sreflex(SaxsDataFileName, models, 
+def sreflex(SaxsDataFileName, models,
             viewer='sasplot', prefix=defprefix):
     global modelingRuns
     global currentDat
@@ -637,8 +637,8 @@ def sreflex(SaxsDataFileName, models,
         modelid = line.split()[0]
         if modelid.startswith('rc01') or modelid.startswith('uc01'):
             currentDat.append(df + "/fits/" + modelid + ".fit")
-            cmd.load(df + "/models/" + modelid + ".pdb", 
-                    "sreflex" + repr(modelingRuns) + modelid) 
+            cmd.load(df + "/models/" + modelid + ".pdb",
+                    "sreflex" + repr(modelingRuns) + modelid)
     openDatFile(viewer, currentDat)
     return
 cmd.extend("sreflex", sreflex)
@@ -696,7 +696,7 @@ def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
     prefix='sasref'
     with TemporaryDirectory(prefix) as tmpdir:
         #create sasrefJob instance
-        sasrefrun = sasrefJob() 
+        sasrefrun = sasrefJob()
         datarray = []
         datarray.append(SaxsDataFileName)
 
@@ -830,7 +830,7 @@ class sasrefJob(object):
     return self.write_config(xcorr_con, config)
 
   def contacts_config(self, pdbfilenames, prefix):
-    # 
+    #
     # Default contacts conditions; subunits shouldn't be
     # terribly far apart (maxdist, in Angstrom)
     #
