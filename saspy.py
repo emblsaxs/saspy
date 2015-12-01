@@ -163,7 +163,7 @@ class SASpy:
                                     text = 'No models found. Please open/load structures in PyMOL to proceed.')
 
         w = Tkinter.Label(self.dialog.interior(),
-                          text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.0 - ATSAS 2.7.0\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
+                          text = '\nSASpy - ATSAS Plugin for PyMOL\nATSAS 2.7.1\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
