@@ -163,7 +163,7 @@ class SASpy:
                                     text = 'No models found. Please open/load structures in PyMOL to proceed.')
 
         w = Tkinter.Label(self.dialog.interior(),
-                          text = '\nSASpy - ATSAS Plugin for PyMOL\nATSAS 2.7.1\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
+                          text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.1 - ATSAS 2.8.0\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
@@ -208,8 +208,8 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         #alpraxin tab
         alpraxinTab = self.createTab("alpraxin", "Position a structure such that its principal intertia\nvectors are aligned with the coordinate axis.\nPlease select one model.")
 
-        #supcomb tab
-        supcombTab = self.createTab('supcomb', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
+        #supalm tab
+        supalmTab = self.createTab('supalm', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
         #join models tab
         joinTab = self.createTab("createComplex", "Create a complex from selected models.\nPlease provide a name and select models to join.")
         self.newModelName = Tkinter.StringVar();
@@ -241,6 +241,23 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         saxsfn_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         saxsfn_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
 
+
+        #dam display tab
+        self.damColor = Tkinter.StringVar();
+        self.damColor.set('white');
+        self.damTrans = Tkinter.StringVar();
+        self.damTrans.set('0.5');
+        damdisplayTab = self.createTab("damdisplay", "Apply a predefined representation to a dummy-atom-model (DAM).\nPlease select one model.")
+        damDisplayColorEntry = Pmw.EntryField(damdisplayTab,
+                                    label_text = 'Color:',
+                                    labelpos='ws',
+                                    entry_textvariable=self.damColor)
+        damDisplayColorEntry.grid(sticky='we', row=3, column=1, padx=5, pady=5)
+        damDisplayTransEntry = Pmw.EntryField(damdisplayTab,
+                                    label_text = 'Transparency:',
+                                    labelpos='ws',
+                                    entry_textvariable=self.damTrans)
+        damDisplayTransEntry.grid(sticky='we', row=4, column=1, padx=5, pady=5)
 
         # config tab
         configTab = self.createTab("configure", "Settings available to configure SASpy:")
@@ -326,6 +343,9 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         elif "alpraxin" == procType:
             alpraxin(selection)
             return
+        elif "damdisplay" == procType:
+            damdisplay(selection, self.damColor.get(), self.damTrans.get())
+            return
         else:
             self.errorWindow("Not enough models selected",
                 "Please select more models for routine \'"+procType+"\'")
@@ -377,8 +397,8 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                 self.submitJobAsThread(procType, models, saxsfn)
             if "sasref" == procType:
                 self.submitJobAsThread(procType, models, saxsfn)
-        if "supcomb" == procType:
-            supcomb(models[0], models[1])
+        if "supalm" == procType:
+            supalm(models[0], models[1])
         return
 
     def prepareJobForSubmit(self):
@@ -390,7 +410,8 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         expn_dict = {
                      'crysol':1,
                      'alpraxin':1,
-                     'supcomb':2,
+                     'damdisplay':1,
+                     'supalm':2,
                      'createComplex':99,
                      'sreflex':99,
                      'sasref':99
@@ -667,8 +688,8 @@ def openDatFile(viewer, fnlst = []):
     viewerproc = subprocess.Popen([viewer] + fnlst)
 
 
-def supcomb(template, toalign, output="empty", prefix=defprefix, param=""):
-    """run supcomb and load new orientation"""
+def supalm(template, toalign, output="empty", prefix=defprefix, param=""):
+    """run supalm and load new orientation"""
     if(toalign == template):
         message("ERROR Please choose different models for superimposition\n")
         return
@@ -676,15 +697,12 @@ def supcomb(template, toalign, output="empty", prefix=defprefix, param=""):
         f1 = writePdb(template)
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
-        if "" == param:
-            param = ['-m', 'F', '--superposition=B']
-        else:
-            param = param.split()
-        systemCommand(['supcomb', '-o', outfn] + param + [f1, f2])
+        param = param.split()
+        systemCommand(['supalm', '-o', outfn] + param + [f1, f2])
         cmd.delete(toalign)
         cmd.load(outfn)
 
-cmd.extend("supcomb", supcomb)
+cmd.extend("supalm", supalm)
 
 
 def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
@@ -734,6 +752,16 @@ def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
     return df
 
 cmd.extend("sasref", sasref)
+
+def damdisplay(sel, color='white', transparency=0.5):
+    #function to make dummy atom models look better
+    #cmd.hide(representation="nonbonded", selection = sel);
+    cmd.hide(representation="everything", selection = sel);
+    cmd.color(color, selection = sel);
+    cmd.set("transparency", transparency, selection = sel);
+    cmd.show(representation="surface", selection = sel);
+
+cmd.extend("damdisplay", damdisplay);
 
 def updateCurrentDat(newDatFile):
     global currentDat
