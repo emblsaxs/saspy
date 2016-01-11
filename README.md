@@ -2,7 +2,7 @@
 PyMOL plugin to run ATSAS tools from within PyMOL
 
 ## Installation ##
-* Download the *saspy.py* file
+* Download the *saspy.py* file from https://raw.githubusercontent.com/emblsaxs/saspy/master/saspy.py
 * Start PyMOL
 * Go to _Plugin_->_Manage Plugins_->_Install_
 * Browse to the downloaded *saspy.py*, select it, and click _Open_
