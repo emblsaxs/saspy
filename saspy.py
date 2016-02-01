@@ -775,9 +775,12 @@ def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
         cf = prefix + "-1.fit"
         outpdb = prefix + ".pdb"
         cmd.load(outpdb)
+        pdf = tmpdir.move_out_numbered(outpdb, prefix, '.pdb')
         df = tmpdir.move_out_numbered(cf, prefix, '.fit')
+
     message( "sasref finished")
     message( ".fit file written to " + df)
+    message( ".pdb file written to " + pdf)
     message( "model loaded as " + prefix)
     openSingleDatFile(viewer, df)
     return df
