@@ -713,10 +713,14 @@ def supalm(template, toalign):
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
         systemCommand(['supalm', '-o', outfn] + [f1, f2])
-        tmat = readTransformationMatrixFromPdbRemark(outfn)
-        cmd.transform_selection(toalign, tmat)            
-
-cmd.extend("supalm", supalm)
+        #reloading file approach, needed for ATSAS 2.7.1
+        cmd.delete(toalign)
+        cmd.load(outfn) 
+        #the following will work once supalm is updated (ATSAS 2.7.2)
+        #tmat = readTransformationMatrixFromPdbRemark(outfn)
+        #cmd.transform_selection(toalign, tmat)
+        
+    cmd.extend("supalm", supalm)
 
 
 def openSingleDatFile(viewer, fn):
