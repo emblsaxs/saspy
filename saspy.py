@@ -9,6 +9,7 @@ import sys
 import re
 import time
 import shutil
+import string
 import Tkinter
 import tkSimpleDialog
 import tkMessageBox
@@ -40,8 +41,8 @@ except ImportError:
 currentDat = []
 modelingRuns = 0
 datViewer = Tkinter.StringVar()
-datmode = Tkinter.StringVar()
-datmode.set('immediately')
+cwd = Tkinter.StringVar()
+cwd.set(os.getcwd())
 
 from sys import platform
 if "win32" == platform:
@@ -145,8 +146,7 @@ class SASpy:
                                  buttons = ('Quit',
                                  #'Debug',
                                  'Refresh model list',
-                                 '3. Execute',
-                                 '4. View SAXS curve'),
+                                 '3. Execute'),
                                  title = 'SASpy - ATSAS Plugin for PyMOL',
                                  command = self.execute)
         Pmw.setbusycursorattributes(self.dialog.component('hull'))
@@ -161,10 +161,10 @@ class SASpy:
         self.warnLabel = Tkinter.Label( self.dialog.interior(),
                                     anchor='center',
                                     fg ="red",
-                                    text = 'No models found. Please open/load structures in PyMOL to proceed.')
+        text = 'No models found. Please open/load structures in PyMOL to proceed.')
 
         w = Tkinter.Label(self.dialog.interior(),
-                          text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.2 - ATSAS 2.7.1\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015.\n',
+                          text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.3 - ATSAS 2.7.1\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015-2016.\n',
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
@@ -178,9 +178,10 @@ class SASpy:
         self.notebook.pack(fill = 'both', expand=2, padx=10, pady=10)
 
         # crysol tab
-        crysolTab = self.createTab("crysol", '''Prediction of theoretical intensities and
-optionally fit to experimental SAXS data.
-Please select one model (and a SAXS .dat file for fit mode).'''
+        crysolTab = self.createTab("crysol", 
+         "Prediction of theoretical intensities and optionally fit\n"+
+         "to experimental SAXS data. Please select at least one model\n"+
+         "(and a SAXS .dat file for fit mode)."
         )
         self.crymodebut = Pmw.RadioSelect(crysolTab,
                                     buttontype='radiobutton',
@@ -204,21 +205,13 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 
         fn = []
         fn.append('crysol')
-        self.notebook.setnaturalsize(pageNames=fn)
+#        self.notebook.setnaturalsize(pageNames=fn)
 
         #alpraxin tab
         alpraxinTab = self.createTab("alpraxin", "Position a structure such that its principal intertia\nvectors are aligned with the coordinate axis.\nPlease select one model.")
 
         #supalm tab
         supalmTab = self.createTab('supalm', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
-        #join models tab
-        joinTab = self.createTab("createComplex", "Create a complex from selected models.\nPlease provide a name and select models to join.")
-        self.newModelName = Tkinter.StringVar();
-        newModelNameEntry = Pmw.EntryField(joinTab,
-                                    label_text = 'New complex name:',
-                                    labelpos='ws',
-                                    entry_textvariable=self.newModelName)
-        newModelNameEntry.grid(sticky='we', row=3, column=0, padx=5, pady=5)
 
         #sasref tab
         sasreftab = self.createTab("sasref", "Quaternary structure modeling against solution scattering data.\nPlease select multiple models (rigid bodies) and a SAXS .dat file.")
@@ -262,31 +255,33 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 
         # config tab
         configTab = self.createTab("configure", "Settings available to configure SASpy:")
+        # saxs viewer selection
         svi_ent = Pmw.EntryField(configTab,
                                     label_text = 'SAXS viewer:',
                                     labelpos='ws',
                                     entry_textvariable = datViewer)
-        svi_but = Tkinter.Button(configTab, text = 'Select...',
+        svi_but = Tkinter.Button(configTab, text = 'Select SAXS viewer',
                                     command = self.getSAXSViewer)
         svi_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         svi_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
 
-        self.datmodebut = Pmw.RadioSelect(configTab,
-                                    buttontype='radiobutton',
-                                    labelpos='w',
-                                    label_text="Open results:",
-                                    command=self.setDatMode,
-                                    selectmode = 'single')
-        self.datmodebut.grid(sticky='we', row=2, column=0, padx=5, pady=2)
-        self.datmodebut.add('immediately')
-        self.datmodebut.add('on request')
-        self.datmodebut.setvalue('immediately')
+        #working directory selection
+        wd_ent = Pmw.EntryField(configTab,
+                                    label_text = 'Current working dir:',
+                                    labelpos='ws',
+                                    entry_textvariable = cwd)
+        #wd_ent.grid(sticky='w', row=2, column=0, columnspan=3, padx=5, pady=2)
+        wd_ent.grid(sticky='w', row=2, column=0, padx=5, pady=2)
+        scd_but = Tkinter.Button(configTab, text = 'Select working directory',
+                                    command = self.setWorkingDirectory)
+        scd_but.grid(sticky='we', row=2, column=1, padx=5, pady=2)
 
         #Model selection
         self.modsW = self.createModelSelectionWidget()
         self.modsW.pack(expand=1, fill='both', padx=10, pady=5)
         self.refreshModelSelectionWidget()
 
+        self.notebook.setnaturalsize()
 
 #GUI FUNCTIONS
 
@@ -325,35 +320,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         datmode.set(mode)
         self.datmodebut.setvalue(mode)
 
-
-    def submitSingleModelJob(self, procType, selection):
-        global currentDat
-        if "crysol" == procType:
-            crymode = self.crysolmode.get()
-            print 'crymode is: ' + crymode
-            if 'predict' == crymode:
-                updateCurrentDat(predcrysol(selection))
-            elif 'fit' == crymode:
-                saxsfn = self.saxsfn.get()
-                if False == os.path.isfile(saxsfn):
-                    self.errorWindow("FILE NOT FOUND",
-                                 "SAXS file \'"+saxsfn+"\' NOT FOUND.");
-                    return
-                updateCurrentDat(fitcrysol(saxsfn, selection))
-
-        elif "alpraxin" == procType:
-            alpraxin(selection)
-            return
-        elif "damdisplay" == procType:
-            damdisplay(selection, self.damColor.get(), self.damTrans.get())
-            return
-        else:
-            self.errorWindow("Not enough models selected",
-                "Please select more models for routine \'"+procType+"\'")
-            return
-        return;
-
-    def submitJobAsThread(self, procType, models= [], saxsfn = ""):
+    def submitJobAsThread(self, procType, models= []):
         viewer = datViewer.get()
         #check how many threads from this plugin are running
         running = self.checkAtsasThreads()
@@ -361,7 +328,13 @@ Please select one model (and a SAXS .dat file for fit mode).'''
             self.errorWindow("Max threads exceeded",
                 "A process is already running, please wait for it to complete.")
             return
-
+        #check if saxs file is available
+        saxsfn = self.saxsfn.get()
+        if False == os.path.isfile(saxsfn):
+            self.errorWindow("FILE NOT FOUND",
+                             "SAXS file \'"+saxsfn+"\' NOT FOUND.");
+            return
+ 
         if 'sasref' == procType:
             t = threading.Thread(target = sasref, name = procType+'_thread', args = (saxsfn, models, viewer))
         elif 'sreflex' == procType:
@@ -385,60 +358,62 @@ Please select one model (and a SAXS .dat file for fit mode).'''
                 print "Just removed "+name+" from the list, with index "+repr(idx)
         return threadsAlive
 
-    def submitMultiModelJob(self, procType, models = []):
-        if "createComplex" == procType:
-            self.createComplex(self.newModelName.get(), models)
-        if "sasref" == procType or "sreflex" == procType:
-            saxsfn = self.saxsfn.get()
-            if False == os.path.isfile(saxsfn):
-                self.errorWindow("FILE NOT FOUND",
-                                 "SAXS file \'"+saxsfn+"\' NOT FOUND.");
-                return
-            if "sreflex" == procType:
-                self.submitJobAsThread(procType, models, saxsfn)
-            if "sasref" == procType:
-                self.submitJobAsThread(procType, models, saxsfn)
+    def submitSaspyJob(self, procType, models = []):
+        if "alpraxin" == procType:
+            alpraxin(models[0])
+            return
+        if "crysol" == procType:
+            self.crysol(models)
+            return
+        if "damdisplay" == procType:
+            damdisplay(models[0], self.damColor.get(), self.damTrans.get())
+            return
         if "supalm" == procType:
             supalm(models[0], models[1])
+            return
+        #remaining job types (sreflex, sasref) 
+        #should be submitted as a thread
+        self.submitJobAsThread(procType, models)
         return
 
-    def prepareJobForSubmit(self):
+    def prepareJobAndSubmit(self):
         procType = self.procedure
-        nModels = self.countSelectedModels()
+        seln = self.countSelectedModels()
 
         if 'configure' == procType:
             return
-        expn_dict = {
-                     'crysol':1,
+
+        if 0 == seln:
+            self.errorWindow("No model selected", "Please select models")
+            return
+
+        #some procedures need an exact number of models selected
+        expect_dict = { #expected number of models
                      'alpraxin':1,
                      'damdisplay':1,
                      'supalm':2,
-                     'createComplex':99,
-                     'sreflex':99,
-                     'sasref':99
-                     }
+        #other procedures need a minimum number of selected models
+                     'sreflex':11, #subtract ten to obtain min expected
+                     'crysol':11,
+                     'sasref':12,
+                    }
+        expn = expect_dict[procType]
 
-        expected_n = expn_dict[procType]
-        if expected_n != 99:
-            if expected_n != nModels:
+        if 10 > expn: #procedure needs an exact number of selected models
+            if expn != seln:
                 self.errorWindow("Wrong number of models selected",
-                "You selected "+ repr(nModels) +" models, but \'" + procType+"\' expects " + repr(expected_n) + " model(s).\n")
+                "You selected "+ getPlural(seln) + ", but \'" + procType+ "\' expects "+getPlural(expn)+".\n")
+                return
+        else: #the procedure needs a minimum number of selected models
+            expn = expn - 10
+            if seln < expn:
+                self.errorWindow("Wrong number of models selected",
+                "You selected "+ getPlural(seln) + ", but \'" + procType +
+                "\' expects at least " + getPlural(expn) +".\n")
                 return
 
-
-        if 0 == nModels:
-            self.errorWindow("No model selected", "Please select models")
-            return
-        if 1 == nModels:
-            if 'sreflex' == procType:
-                self.submitMultiModelJob(procType, self.modsW.getcurselection())
-            else:
-                selection = self.modsW.getcurselection()[0]
-                self.submitSingleModelJob(procType, selection)
-        if 1 < nModels:
-            self.submitMultiModelJob(procType, self.modsW.getcurselection())
-        return
-
+        self.submitSaspyJob(procType, self.modsW.getcurselection())
+        return        
 
     def getListOfModels(self):
         #models can not contain the underscore character '_'
@@ -481,6 +456,8 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         return tab_struc
 
     def openCurrentDatFile(self):
+        global currentDat
+#        message("About to open current dat file: " + repr(currentDat))
         if 0 == len(currentDat):
             tkMessageBox.showerror('No curve yet',
                                    'No SAXS intensities have been calculated yet',
@@ -490,29 +467,21 @@ Please select one model (and a SAXS .dat file for fit mode).'''
             openDatFile(datViewer.get(), currentDat)
         return
 
-    def createComplex(self, newName, models = []):
-        mols = self.getListOfModels()
-        if newName in mols:
-            self.errorWindow("Model name in use", "Please choose a different name for the new model")
-            return
-        #create working dir
-        with TemporaryDirectory('createComplex'):
-            #write every model to file, then read back in as single model
-            with open(newName+".pdb", 'w') as of:
-                for p in models:
-                    pdbfn = writePdb(p)
-                    with open(pdbfn, 'r') as rf:
-                        for line in rf:
-                            if not line.startswith("END"):
-                                of.write(line)
-            cmd.load(newName+".pdb")
-
     def getSAXSViewer(self):
         global datViewer
         file_name = tkFileDialog.askopenfilename(
             title='SAXS viewer', initialdir='',
             parent=self.parent)
         datViewer.set(file_name)
+        return
+
+    def setWorkingDirectory(self):
+        newWorkDir = tkFileDialog.askdirectory(
+            title='Set working directory', initialdir='',
+            parent=self.parent)
+        cmd.cd(newWorkDir)
+        cwd.set(newWorkDir)
+        message("Working directory changed to: " + newWorkDir);
         return
 
     def getSAXSFile(self):
@@ -526,9 +495,28 @@ Please select one model (and a SAXS .dat file for fit mode).'''
         return
 
     def tabSelection(self, pagename):
+        #refresh each time a tab is selected
+        cwd.set(os.getcwd()) #I don't know how to refresh this if the 
+                             #user just calls 'cd'
         self.procedure = pagename
         return
 
+    def crysol(self, selection, param=""):
+        #wrapper for the different crysol modes
+        if 1 < len(selection):
+            message("CRYSOL will be executed for a complex")
+            message("made of the following models: "+repr(selection))
+        crymode = self.crysolmode.get()
+        if 'predict' == crymode:
+            return updateCurrentDat(predcrysol(selection))
+        elif 'fit' == crymode:
+            saxsfn = self.saxsfn.get()
+            if False == os.path.isfile(saxsfn):
+                self.errorWindow("FILE NOT FOUND",
+                             "SAXS file \'"+saxsfn+"\' NOT FOUND.");
+                return
+            return updateCurrentDat(fitcrysol(saxsfn, selection))
+            
     def execute(self, cmd):
         """ Run the cmd represented by the button clicked by user.
         """
@@ -541,10 +529,7 @@ Please select one model (and a SAXS .dat file for fit mode).'''
 #        elif cmd == 'Debug':
 
         elif cmd == '3. Execute':
-            self.prepareJobForSubmit()
-
-        elif cmd == '4. View SAXS curve':
-            self.openCurrentDatFile()
+            self.prepareJobAndSubmit()
 
         elif cmd == 'Quit':
             self.checkAtsasThreads()
@@ -578,6 +563,13 @@ def message(text):
     print "SASpy: "+text
     return
 
+def getPlural(n):
+    #get plurals right
+    outstring = repr(n) +" model";
+    if 1 != n: 
+        outstring+='s'
+    return outstring   
+
 def destFile(folder, basename, suffix):
     #check if the destination filename already exists
     full = os.path.join(folder, basename + suffix)
@@ -593,38 +585,49 @@ def destFile(folder, basename, suffix):
 
 def writePdb(sel, prefix = ""):
     pdbfn = prefix + sel + ".pdb"
-    cmd.save(pdbfn, sel)
-    return pdbfn
+    npdbfn = pdbfn.replace(" or ", "");
+    npdbfn = npdbfn.replace(" and ", "");
+    npdbfn = npdbfn.translate(None, string.whitespace)
+    cmd.save(npdbfn, sel)
+    return npdbfn
 
 #run crysol in predictive mode for a given selection
-def predcrysol(sel, prefix=defprefix, param = " "):
+def predcrysol(models, prefix=defprefix, param = " "):
+    #write all models into a single file  
+    selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
-        pdbfn = writePdb(sel)
-        cf = sel + "00.int"
+        #cmd.save(selection, pdbfn)
+        pdbfn = writePdb(selection)
         systemCommand(["crysol"] + param.split() + [pdbfn])
-        df = tmpdir.move_out_numbered(cf, sel, ".int")
+        fid = pdbfn.replace(".pdb", "")
+        df = tmpdir.move_out_numbered(fid+"00.int", fid, '.int')
     message( ".int file written to " + df)
-    if 'immediately' == datmode.get():
-        openSingleDatFile(datViewer.get(), df)
+    openSingleDatFile(datViewer.get(), df)
     return df
 
 cmd.extend("predcrysol", predcrysol)
 
 #run crysol in fit mode
-def fitcrysol(SaxsDataFileName, sel, prefix = defprefix, param = ""):
+def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
     if False == os.path.isfile(SaxsDataFileName):
         message("SAXS .dat file \'"+SaxsDataFileName+"\' not found")
         return
     fileFullPath = os.path.abspath(SaxsDataFileName);
+
+    #write all models into a single file  
+    selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
-        pdbfn = writePdb(sel)
+        #cmd.save(selection, pdbfn)
+        pdbfn = writePdb(selection)
         systemCommand(["crysol"] + param.split() + [pdbfn, fileFullPath])
-        cf = sel + "00.fit"
-        df = tmpdir.move_out_numbered(cf, sel, '.fit')
+        fid = pdbfn.replace(".pdb", "")
+        df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
     message( ".fit file written to " + df)
-    if 'immediately' == datmode.get():
-        openSingleDatFile(datViewer.get(), df)
+    openSingleDatFile(datViewer.get(), df)
     return df
+
+cmd.extend("fitcrysol", fitcrysol)
+        
 
 #run sreflex
 def sreflex(SaxsDataFileName, models,
@@ -719,21 +722,18 @@ def supalm(template, toalign):
         #the following will work once supalm is updated (ATSAS 2.7.2)
         #tmat = readTransformationMatrixFromPdbRemark(outfn)
         #cmd.transform_selection(toalign, tmat)
-        
-    cmd.extend("supalm", supalm)
 
+cmd.extend("supalm", supalm)
 
 def openSingleDatFile(viewer, fn):
     openDatFile(viewer, [fn])
 
-
 def openDatFile(viewer, fnlst = []):
+    #message(repr(fnlst))
     for fn in fnlst:
         if not os.path.isfile(fn):
             message("ERROR Curve file \'" + fn + "\' not found.")
     viewerproc = subprocess.Popen([viewer] + fnlst)
-
-
 
 def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
     global modelingRuns
