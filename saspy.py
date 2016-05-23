@@ -715,7 +715,7 @@ def supalm(template, toalign):
         f1 = writePdb(template)
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
-        systemCommand(['supalm', '-o', outfn] + [f1, f2])
+        systemCommand(['supalm', '-o', outfn, '--prog2=crysol'] + [f1, f2])
         #reloading file approach, needed for ATSAS 2.7.1
         cmd.delete(toalign)
         cmd.load(outfn) 
