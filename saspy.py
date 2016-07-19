@@ -10,6 +10,7 @@ import re
 import time
 import shutil
 import string
+import math
 import Tkinter
 import tkSimpleDialog
 import tkMessageBox
@@ -47,8 +48,10 @@ cwd.set(os.getcwd())
 from sys import platform
 if "win32" == platform:
     datViewer.set("sasplotqt")
+if "darwin" == platform:
+    datViewer.set("/Applications/ATSAS/sasplot.app")
 else:
-    datViewer.set("sasplot") #on linux + mac
+    datViewer.set("sasplot") #on linux
 
 def __init__(self):
     """ SASpy - ATSAS Plugin for PyMOL
@@ -154,6 +157,8 @@ class SASpy:
         self.maxThreads    = 1
         self.procedure     = 'empty'
         self.saxsfn        = Tkinter.StringVar()
+        self.sasrefmode    = Tkinter.StringVar()
+        self.sasrefmode.set('local')
         self.crysolmode    = Tkinter.StringVar()
         self.crysolmode.set('predict')
         self.prefix        = Tkinter.StringVar()
@@ -164,7 +169,7 @@ class SASpy:
         text = 'No models found. Please open/load structures in PyMOL to proceed.')
 
         w = Tkinter.Label(self.dialog.interior(),
-                          text = '\nSASpy - ATSAS Plugin for PyMOL\nVersion 1.3 - ATSAS 2.7.1\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015-2016.\n',
+                          text = '\nSASpy - ATSAS Plugin for PyMOL\nATSAS 2.7.2\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015-2016.\n',
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
@@ -223,6 +228,18 @@ class SASpy:
                                     command = self.getSAXSFile)
         saxsfn_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         saxsfn_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
+
+        self.sasrefmodebut = Pmw.RadioSelect(sasreftab,
+                                    buttontype='radiobutton',
+                                    labelpos='w',
+                                    label_text="Refinement mode:",
+                                    command=self.setSasrefMode,
+                                    selectmode = 'single')
+        self.sasrefmodebut.grid(sticky='we', row=2, column=0, padx=5, pady=2)
+        self.sasrefmodebut.add('local')
+        self.sasrefmodebut.add('global')
+        self.sasrefmodebut.setvalue('local')
+
 
         # sreflex tab
         sreflexTab = self.createTab("sreflex", "Model refinement based on SAXS data and normal mode analysis.\nPlease select models and a SAXS .dat file.")
@@ -314,6 +331,11 @@ class SASpy:
         self.crysolmode.set(mode)
         self.crymodebut.setvalue(mode)
 
+    def setSasrefMode(self, mode):
+        print "Setting sasref mode to "+mode
+        self.sasrefmode.set(mode)
+        self.sasrefmodebut.setvalue(mode)
+
     def setDatMode(self, mode):
         print "Setting open mode to " + mode
         global datmode
@@ -336,7 +358,7 @@ class SASpy:
             return
  
         if 'sasref' == procType:
-            t = threading.Thread(target = sasref, name = procType+'_thread', args = (saxsfn, models, viewer))
+            t = threading.Thread(target = sasref, name = procType+'_thread', args = (saxsfn, models, self.sasrefmode.get(), viewer))
         elif 'sreflex' == procType:
             t = threading.Thread(target = sreflex, name = procType+'_thread', args = (saxsfn, models, viewer))
         t.setDaemon(1)
@@ -488,7 +510,7 @@ class SASpy:
         if 'crysol' == self.procedure:
             self.setCrysolMode('fit')
         file_name = tkFileDialog.askopenfilename(
-            title='SAXS File', initialdir='',
+            title='SAXS File', initialdir=cwd,
             filetypes=[('saxs data files', '*.dat'), ('all files', '*')],
             parent=self.parent)
         self.saxsfn.set(file_name)
@@ -591,16 +613,46 @@ def writePdb(sel, prefix = ""):
     cmd.save(npdbfn, sel)
     return npdbfn
 
+#parse crysol log file
+def parseCrysolLog (logFileName):
+    '''Parse Crysol log file, obtain Chi2 and Rg'''
+    #will not parse crysol_summary.txt, but the .log file 
+    #created for each individual run
+
+    chi2 = 9999;
+    Rg = 9999;
+
+    position = -1
+    counter = 0
+    with open(logFileName, 'r') as rf:
+        for line in rf:
+            counter += 1
+            if re.match("(.*)Fitting parameters(.*)", line):
+                print "line number: " + repr(counter)
+                position = counter + 2
+            if counter == position:
+                if line[66:73] != "*******":
+                    chi2 = float(line[66:73])
+            if re.match("(.*)Rg from the slope of net intensity(.*)", line):
+                Rg = float(line[59:65])
+    rf.close()
+    return {'chi2':chi2, 'Rg':Rg}
+
 #run crysol in predictive mode for a given selection
 def predcrysol(models, prefix=defprefix, param = " "):
     #write all models into a single file  
     selection = " or ".join(models)
+    Rg = -9999;
     with TemporaryDirectory() as tmpdir:
         #cmd.save(selection, pdbfn)
         pdbfn = writePdb(selection)
         systemCommand(["crysol"] + param.split() + [pdbfn])
         fid = pdbfn.replace(".pdb", "")
+        result = parseCrysolLog(fid+"00.log")
+        Rg = result['Rg']
         df = tmpdir.move_out_numbered(fid+"00.int", fid, '.int')
+
+    message("CRYSOL Theoretical Rg = " + repr(Rg))
     message( ".int file written to " + df)
     openSingleDatFile(datViewer.get(), df)
     return df
@@ -614,6 +666,9 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
         return
     fileFullPath = os.path.abspath(SaxsDataFileName);
 
+    Rg = -9999
+    chi2 = -9999
+
     #write all models into a single file  
     selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
@@ -621,13 +676,18 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
         pdbfn = writePdb(selection)
         systemCommand(["crysol"] + param.split() + [pdbfn, fileFullPath])
         fid = pdbfn.replace(".pdb", "")
+        result = parseCrysolLog(fid+"00.log")
+        Rg = result['Rg']
+        chi2 = result['chi2']
         df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
+
+    message("CRYSOL Theoretical Rg = " + repr(Rg))
+    message("CRYSOL Chi-square = " + repr(chi2))
     message( ".fit file written to " + df)
     openSingleDatFile(datViewer.get(), df)
     return df
 
 cmd.extend("fitcrysol", fitcrysol)
-        
 
 #run sreflex
 def sreflex(SaxsDataFileName, models,
@@ -681,10 +741,10 @@ def readTransformationMatrixFromPdbRemark(pdbfn):
         line=rf.readline()
         if re.match("(.*)Transformation(.*)", line):
             while(c):
-                a.append(line[39:47])
-                a.append(line[47:55])
-                a.append(line[55:63])
-                a.append(line[63:71])
+                a.append(line[39:51])
+                a.append(line[51:63])
+                a.append(line[63:75])
+                a.append(line[75:87])
                 line=rf.readline()
                 c=c-1;
             break 
@@ -716,12 +776,12 @@ def supalm(template, toalign):
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
         systemCommand(['supalm', '-o', outfn, '--prog2=crysol'] + [f1, f2])
-        #reloading file approach, needed for ATSAS 2.7.1
-        cmd.delete(toalign)
-        cmd.load(outfn) 
-        #the following will work once supalm is updated (ATSAS 2.7.2)
-        #tmat = readTransformationMatrixFromPdbRemark(outfn)
-        #cmd.transform_selection(toalign, tmat)
+        #reloading file approach, needed for ATSAS 2.7.1 
+        #cmd.delete(toalign)
+        #cmd.load(outfn) 
+        #and the following works properly for ATSAS 2.7.2
+        tmat = readTransformationMatrixFromPdbRemark(outfn)
+        cmd.transform_selection(toalign, tmat)
 
 cmd.extend("supalm", supalm)
 
@@ -733,66 +793,13 @@ def openDatFile(viewer, fnlst = []):
     for fn in fnlst:
         if not os.path.isfile(fn):
             message("ERROR Curve file \'" + fn + "\' not found.")
-    viewerproc = subprocess.Popen([viewer] + fnlst)
-
-def sasref(SaxsDataFileName, models = [], viewer='sasplot', param = " "):
-    global modelingRuns
-    if False == os.path.isfile(SaxsDataFileName):
-        message("SAXS .dat file \'"+SaxsDataFileName+"\' not found")
-        return
-    fileFullPath = os.path.abspath(SaxsDataFileName)
-    prefix='sasref'
+    if('darwin' == platform):
+        viewerproc = subprocess.Popen(["open"] + ["-a"] + [viewer] + fnlst)       
+    else:
+        viewerproc = subprocess.Popen([viewer] + fnlst) 
  
-    with TemporaryDirectory(prefix) as tmpdir:
-        #sasref can not deal with long path/names
-        tmpsaxsfn =  os.path.basename(SaxsDataFileName)+".dat"
-        tmpdir.copy_in(fileFullPath, tmpsaxsfn);
-
-        #create sasrefJob instance
-        sasrefrun = sasrefJob()
-        datarray = []
-        datarray.append(tmpsaxsfn)
-
-        subunits = []
-        for m in models:
-            pdbfn = writePdb(m)
-            pd = dict()
-            pd['filepath'] = pdbfn
-            pd['symmetry'] = 'P1'
-            pd['multiplicity'] = 1
-            subunits.append(pd)
-        modelingRuns += 1
-        prefix = prefix + repr(modelingRuns)
-
-        # It's possible to do this without creating a command file,
-        # by using StringIO, but writing out a file here facilitates
-        # debugging if anything goes wrong
-        comfn = 'setup_sasrefcv.com'
-        with open(comfn, 'w') as commandfile:
-            com = sasrefrun.configure(datarray, 'angstrom', subunits,
-                                      "", "P1", prefix )
-            commandfile.write(com)
-        with open(comfn, 'r') as commandfile:
-            systemCommand(['sasrefcv'], stdin=commandfile)
-
-        logfn = prefix + ".log"
-        cf = prefix + "-1.fit"
-        outpdb = prefix + ".pdb"
-        cmd.load(outpdb)
-        pdf = tmpdir.move_out_numbered(outpdb, prefix, '.pdb')
-        df = tmpdir.move_out_numbered(cf, prefix, '.fit')
-
-    message( "sasref finished")
-    message( ".fit file written to " + df)
-    message( ".pdb file written to " + pdf)
-    message( "model loaded as " + prefix)
-    openSingleDatFile(viewer, df)
-    return df
-
-cmd.extend("sasref", sasref)
-
 def damdisplay(sel, color='white', transparency=0.5):
-    #function to make dummy atom models look better
+    '''set visualization of dummy atom models'''
     #cmd.hide(representation="nonbonded", selection = sel);
     cmd.hide(representation="everything", selection = sel);
     cmd.color(color, selection = sel);
@@ -806,113 +813,185 @@ def updateCurrentDat(newDatFile):
     currentDat=[]
     currentDat.append(newDatFile)
 
-#class to execute sasrefcv
-#stolen from sasflow
-class sasrefJob(object):
-  #
-  # datfilename: experimental data
-  # setup: a dictionary of subunits with symmetry and multiplicity info
-  # contactsfilename: contact conditions (may be empty)
-  #
-  def configure(self, datfilenames, unit, subunits, contactsfilename, symmetry, prefix):
-#    self.setPriority(task.TASK_PRIORITY_LOW)
+def parseEulerAngles(filename):
+    '''Parse Euler angles and translations 
+    per subunit from SASREF output PDB'''
 
-    self.curve_con = self.curve_config(datfilenames, unit, prefix)
-    self.subunit_con = self.subunit_config(subunits, prefix)
-    self.xcorr_con = self.xcorr_config(datfilenames, subunits, prefix)
-    self.contacts_con = contactsfilename
+    #temporal storage of values, one set per subunit
+    collection = []
+    move = []
 
-    #
-    # NOTE: The default contacts keep things together, but severely
-    #       increases runtime.
-    #
-    # if self.contacts_con == "":
-    #  self.contacts_con = self.contacts_config(pdbfilenames, prefix)
-    #
+    with open(filename, 'r') as rf:
+        for line in rf:
+            if re.match("REMARK Old center positioned at(.*)", line):
+                move.append(float(line[32:39]))
+                move.append(float(line[40:47]))
+                move.append(float(line[48:55]))
+            if re.match("REMARK Rotated by Euler angles(.*)", line):
+                move.append(float(line[32:39]))
+                move.append(float(line[40:47]))
+                move.append(float(line[48:55]))
+            if re.match("REMARK New center positioned at(.*)", line):
+                move.append(float(line[32:39]))
+                move.append(float(line[40:47]))
+                move.append(float(line[48:55]))
+            if re.match("TER", line):
+                collection.append(move)
+                move = []
+    return collection
 
-    ans = "U        ! User mode\n"                  \
-          "%s       ! Output file prefix\n"         \
-          "%s\n"                                    \
-          "%s       ! Master symmetry\n"            \
-          "%s       ! Curve config\n"               \
-          "         ! Smearing parameters (none)\n" \
-          "%s       ! Subunit config\n"             \
-          "%s       ! Cross-correlation table\n"    \
-          "%s       ! Contact conditions\n"         \
-          "Unknown  ! Particle shape\n"
+def anglesToTTTMat(movement):
+    '''Return a PyMOL transformation matrix from a set of 
+    SASREF translation vectors and Euler angles'''
+    alpha = math.radians(movement[3])
+    beta  = math.radians(movement[4])
+    gamma = math.radians(movement[5])
+    
+    sinalp = - math.sin(alpha)
+    cosalp =   math.cos(alpha)
+    sinbet = - math.sin(beta)
+    cosbet =   math.cos(beta)
+    singam = - math.sin(gamma)
+    cosgam =   math.cos(gamma)
 
-    #self.setStdin(ans % (prefix, prefix, self.symmetry,
-    return (ans % (prefix, prefix, symmetry,
-                                         self.curve_con,
-                                         self.subunit_con,
-                                         self.xcorr_con,
-                                         self.contacts_con))
-    #self.setProgramName("sasrefcv")
+    #transforming to PyMOL TTT as explained in
+    #http://www.pymolwiki.org/index.php/Transform_selection
 
-    #self.symmetry = symmetry
-    #self.log      = prefix + ".log"
-    #self.fit      = prefix + "-1.fit"
-    #self.pdb      = prefix + ".pdb"
+    output = []
+    output.append(cosalp*cosbet*cosgam - sinalp*singam)
+    output.append(-cosalp*cosbet*singam - sinalp*cosgam)
+    output.append(cosalp*sinbet)
+    output.append(movement[6])
+    output.append(sinalp*cosbet*cosgam + cosalp*singam)
+    output.append(-sinalp*cosbet*singam + cosalp*cosgam)
+    output.append(sinalp*sinbet)
+    output.append(movement[7])
+    output.append(-sinbet*cosgam)
+    output.append(sinbet*singam)
+    output.append(cosbet)
+    output.append(movement[8])
+    output.append(-movement[0])
+    output.append(-movement[1])
+    output.append(-movement[2])
+    output.append(1.0)
+    return output
+
+def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='sasplot'):
+    '''Execute SASREF and apply obtained transformations to subunits'''
+
+    global modelingRuns
+
+    #parameter configuration
+    #local refinment (to reproduce MASSHA behaviour):
+    confp = {'spst':'1.0', # spatial step, SASREF default is 5.0 Angstrom
+             'anst':'5.0', #angular step, SASREF default is 20 degrees
+             'init':'1.0', # Initial annealing temperature (def= 10) 
+             'sche':'0.9', # Annealing schedule factor
+             'iter':'500', # Max # of iterations at each T (def = 10000)
+             'maxs':' 50', # Max # of successes at each T (def = 1000)
+             'mins':' 10', # Min # of successes to continue (def = 100)
+             'maxa':' 10', # Max # of annealing steps (def = 100)
+             'msol':'  1', # Max # of solutions to store (def = 1)
+             'shft':' '}   #xyz init shift, blank for local
+                           #0.0 for global search
+
+    if 'global' == mode: #settings for default global search
+        confp['spst'] =  '5.0'
+        confp['anst'] = '20.0'
+        confp['init'] = '10.0'
+        confp['sche'] =  '0.9'
+        confp['iter'] = '10000'
+        confp['maxs'] = '1000'
+        confp['mins'] = '100'
+        confp['maxa'] = '100'
+        confp['msol'] = '1'
+        confp['shft'] = '0.0'
+
+    if False == os.path.isfile(SaxsDataFileName):
+        message("SAXS .dat file \'"+SaxsDataFileName+"\' not found")
+        return 113
+    fileFullPath = os.path.abspath(SaxsDataFileName)
+
+    prefix = 'sasref'
+    modelingRuns += 1
+    prefix = prefix + repr(modelingRuns)
+
+    numberOfSubunits = len(models);
+
+    with TemporaryDirectory(prefix) as tmpdir:
+        #sasref can not deal with long path/names
+        tmpsaxsfn =  os.path.basename(SaxsDataFileName)
+        tmpdir.copy_in(fileFullPath, tmpsaxsfn);
+
+        sc = ""
+        sc += "Expert  ! Configuration mode\n"
+        sc += prefix + " ! logfilename\n"
+        sc += prefix + " ! projectDescription\n"
+        sc += "        ! initRandomSeed\n"
+        sc += repr(numberOfSubunits) + "     ! totalNumberOfSubunits\n"
+        sc += "P1      ! Symmetry\n"
+        sc += "1       ! totalNumberOfScatteringCurves\n"
+        sc += "N       ! KratkyGeometry\n"
+        sc += "1,2     ! Input first & last subunits in 1-st construct\n"
+        sc += tmpsaxsfn+ " ! Enter file name, 1-st experimental data\n"
+        sc += "        ! Angular units input file\n"
+        sc += "1.0     ! Fitting range in fractions of Smax\n"
+
+        count = 1
+        for m in models:
+            pdbtmpfn = writePdb(m)
+            pdbtmpfn = os.path.basename(pdbtmpfn)
+            fid = os.path.splitext(pdbtmpfn)[0]
+            #print "abs: " + m + " and temp: "+pdbtmpfn + "while id: "+fid;
+            #tmpdir.copy_in(m, pdbtmpfn);
+            #compute amplitudes
+            systemCommand(["crysol"] + ["-p"] + [fid] + [pdbtmpfn])
+            print "computed alm for : "+ fid +"\n"
+            sc += fid+".alm"+"! subunit " +repr(count)+" amplitudes\n"
+            sc += "0.0     ! Initial rotation by alpha\n"
+            sc += "0.0     ! Initial rotation by beta\n"
+            sc += "0.0     ! Initial rotation by gamma\n"
+            sc += confp['shft']+"       ! Initial shift along X\n"
+            sc += confp['shft']+"       ! Initial shift along Y\n"
+            sc += confp['shft']+"       ! Initial shift along Z\n"
+            sc += "N       ! Movements limitations of subunit:  N/F/X/Y/Z/D\n"
+            sc += confp['spst'] + " ! Spatial step in Angstrom\n"
+            sc += confp['anst'] + " ! Angular step in degrees\n"
 
 
-  def curve_config(self, datfilenames, unit, prefix):
-    if unit == "angstrom":
-      u = 1
-    elif unit == "nanometer":
-      u = 2
+        #continue with rest of commands
+        sc += "        ! Cross penalty weight\n" 
+        sc += "        ! Disconnectivity penalty weight\n"
+        sc += "        ! Docking penalty weight\n"
+        sc += "        ! File name, contacts conditions, CR for none\n"
+        sc += "U       ! Expected particle shape: <P>rolate, <O>blate or <U>nknown\n"
+        sc += "        ! Shift penalty weight \n"
+        sc += confp['init'] + "     ! Initial annealing temperature (def= 10)   \n"
+        sc += confp['sche'] + "     ! Annealing schedule factor\n"
+        sc += confp['iter'] +  "    ! Max # of iterations at each T (def = 10000)\n"
+        sc += confp['maxs'] + "     ! Max # of successes at each T (def = 1000)\n"
+        sc += confp['mins'] +"      ! Min # of successes to continue (def = 100)\n"
+        sc += confp['maxa'] +"      ! Max # of annealing steps (def = 100)\n"
+        sc += confp['msol']+"       ! Max # of solutions to store (def = 1)\n"
+        comfn = 'setup_sasref.com'
+ 
+        with open(comfn, 'w') as commandfile:
+            commandfile.write(sc)
+        with open(comfn, 'r') as commandfile:
+            systemCommand(['sasref'], stdin=commandfile)
 
-    config = "%d\n" % len(datfilenames)
-    for datfilename in datfilenames:
-      config += "%s -1.0 P1 %s 1.0 0 1.0 n\n" % (datfilename, u)
+        outpdb = prefix + ".pdb" 
+        #read and apply movements 
+        moves = parseEulerAngles(outpdb);
+        idx = 0
+        for mov in moves:
+            tmat = anglesToTTTMat(mov)
+            cmd.transform_selection(models[idx], tmat)            
+            idx = idx+1
+        cf = tmpdir.move_out_numbered(prefix + "-1.fit", prefix, '.fit')
+        message( ".fit file written to " + cf)
+        openSingleDatFile(viewer, cf)
+    return 
 
-    cur_con = prefix + "_cur.con"
-    return self.write_config(cur_con, config)
 
-  def subunit_config(self, subunits, prefix):
-    m = 0
-    config = "%d\n"
-    for subunit in subunits:
-      n = int(subunit['multiplicity'])
-      m += n
-      for k in range(n):
-        config += "%s y n %s\n" % ( subunit['filepath'],
-                                    subunit['symmetry'])
 
-    sub_con = prefix + "_sub.con"
-    return self.write_config(sub_con, config % m)
-
-  def xcorr_config(self, datfilenames, subunits, prefix):
-    # total number of subunits
-    m = 0
-    for subunit in subunits:
-      m += int(subunit['multiplicity'])
-
-    config = ""
-    for datfilename in datfilenames:
-      # repeat '0.0' m-times and join, sparated by whitespace
-      config += " ".join([ "0.0" ] * m) + "\n"
-
-    xcorr_con = prefix + "_xcorr.con"
-    return self.write_config(xcorr_con, config)
-
-  def contacts_config(self, pdbfilenames, prefix):
-    #
-    # Default contacts conditions; subunits shouldn't be
-    # terribly far apart (maxdist, in Angstrom)
-    #
-    maxdist = 10.0
-
-    config = ""
-    for i in range(len(pdbfilenames)):
-      config += "dist %f\n" % maxdist
-      for j in range(len(pdbfilenames)):
-        if i <> j:
-          config += "%d 1 0  %d 1 0\n" % (i + 1, j + 1)
-
-    contacts_con = prefix + "_contacts.con"
-    return self.write_config(contacts_con, config)
-
-  def write_config(self, confilename, contents):
-    with open(confilename, "w") as conf:
-        conf.write(contents)
-    return confilename
