@@ -668,7 +668,7 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
 
     Rg = -9999
     chi2 = -9999
-
+    
     #write all models into a single file  
     selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
@@ -681,9 +681,16 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
         chi2 = result['chi2']
         df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
 
+        #if there is more than one model, we are evaluating a complex,
+        #in this case we should provide the coordinates of the complex
+        #to the user.
+        if 1 < len(models):
+            pdbfn=tmpdir.move_out_numbered(pdbfn, fid, '.pdb')
+            message( ".pdb file written to " + pdbfn)
+
+    message( ".fit file written to " + df)
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message("CRYSOL Chi-square = " + repr(chi2))
-    message( ".fit file written to " + df)
     openSingleDatFile(datViewer.get(), df)
     return df
 
@@ -988,6 +995,9 @@ def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='sasplot'):
             tmat = anglesToTTTMat(mov)
             cmd.transform_selection(models[idx], tmat)            
             idx = idx+1
+
+        outpdbfn = tmpdir.move_out_numbered(prefix + ".pdb", prefix, '.pdb')
+        message( ".pdb file written to " + outpdbfn)
         cf = tmpdir.move_out_numbered(prefix + "-1.fit", prefix, '.fit')
         message( ".fit file written to " + cf)
         openSingleDatFile(viewer, cf)
