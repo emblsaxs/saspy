@@ -669,6 +669,8 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
     Rg = -9999
     chi2 = -9999
     
+    
+
     #write all models into a single file  
     selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
@@ -681,7 +683,7 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
         chi2 = result['chi2']
         df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
 
-        #if there is more than one model, we are evaluating a complex,
+        #if there is more than one model, we are evaluating a complex
         #in this case we should provide the coordinates of the complex
         #to the user.
         if 1 < len(models):
@@ -722,19 +724,30 @@ def sreflex(SaxsDataFileName, models,
     if False == os.path.isfile(reportfn):
         message("SREFLEX report file \'"+reportfn+"\' not found, something went wrong")
         return
-    rf = open(reportfn, 'r')
     currentDat = []
-    for line in rf:
-        sys.stdout.write(line)
-        modelid = line.split()[0]
-        if modelid.startswith('rc01') or modelid.startswith('uc01'):
-            currentDat.append(df + "/fits/" + modelid + ".fit")
-            cmd.load(df + "/models/" + modelid + ".pdb",
-                    "sreflex" + repr(modelingRuns) + modelid)
+    with open(reportfn, 'r') as rf:
+        for line in rf:
+            sys.stdout.write(line)
+            modelid = line.split()[0]
+            if modelid.startswith('rc01') or modelid.startswith('uc01'):
+                currentDat.append(df + "/fits/" + modelid + ".fit")
+                cmd.load(df + "/models/" + modelid + ".pdb",
+                        "sreflex" + repr(modelingRuns) + modelid)
     openDatFile(viewer, currentDat)
     return
+
 cmd.extend("sreflex", sreflex)
 
+def readNSDFromSupalmPdb(pdbfn):
+    """parse NSD value from SUPALM output PDB file
+    useful for Windows users without console access"""
+    nsd = 9999;
+    with open(pdbfn, 'r') as rf:
+        for line in rf:
+            if re.match("(.*)Final distance(.*)", line):
+                nsd = float(line[38:49])
+                break
+    return nsd
 
 def readTransformationMatrixFromPdbRemark(pdbfn):
     #read transformation matrix from output pdb
@@ -755,11 +768,11 @@ def readTransformationMatrixFromPdbRemark(pdbfn):
                 line=rf.readline()
                 c=c-1;
             break 
+    rf.close()
     pymolOrder=[1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15, 4, 8, 12, 16]
     p=[]; #output in pymol's format
     for i in pymolOrder:
         p.append(float (a[i-1]))
-
     return p
 
 def alpraxin(sel):
@@ -788,7 +801,9 @@ def supalm(template, toalign):
         #cmd.load(outfn) 
         #and the following works properly for ATSAS 2.7.2
         tmat = readTransformationMatrixFromPdbRemark(outfn)
+        nsd = readNSDFromSupalmPdb(outfn)
         cmd.transform_selection(toalign, tmat)
+        message("SUPALM NSD = " + repr(nsd))
 
 cmd.extend("supalm", supalm)
 
