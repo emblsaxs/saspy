@@ -20,7 +20,6 @@ import threading
 import subprocess
 import itertools
 
-
 # pymol lib
 try:
     from pymol import cmd
@@ -39,6 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
+saspyVersion = "2.7.2"
 currentDat = []
 modelingRuns = 0
 datViewer = Tkinter.StringVar()
@@ -168,8 +168,14 @@ class SASpy:
                                     fg ="red",
         text = 'No models found. Please open/load structures in PyMOL to proceed.')
 
+        description  = "SASpy - ATSAS Plugin for PyMOL\n"
+        description += "ATSAS " + saspyVersion + "\n\n"
+        description += "European Molecular Biology Laboratory\n"
+        description += "Hamburg Outstation, ATSAS Team, 2015-2016.\n"
+
+        
         w = Tkinter.Label(self.dialog.interior(),
-                          text = '\nSASpy - ATSAS Plugin for PyMOL\nATSAS 2.7.2\n\nEuropean Molecular Biology Laboratory\nHamburg Outstation, ATSAS Team, 2015-2016.\n',
+                          text = description,
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
@@ -300,12 +306,21 @@ class SASpy:
 
         self.notebook.setnaturalsize()
 
+        self.versionSanityCheck()
+
 #GUI FUNCTIONS
 
     def errorWindow(self,title, msg):
         tkMessageBox.showerror(title,
-                               "ERROR "+ msg,
+                               "ERROR "+ msg, 
                                parent=self.parent)
+        return
+
+    def versionSanityCheck(self):
+        msg = checkAtsasVersion()
+        if "OK" != msg:
+            self.errorWindow("ERROR", msg)
+            self.execute("Quit");
         return
 
     def createModelSelectionWidget(self):
@@ -659,6 +674,27 @@ def predcrysol(models, prefix=defprefix, param = " "):
 
 cmd.extend("predcrysol", predcrysol)
 
+def checkAtsasVersion():
+    '''Check if ATSAS binaries are available on PATH and 
+       if the installed ATSAS version matches what SASpy expects'''
+    try: 
+        status = subprocess.call(["crysol", "-v"])
+    except:
+        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS."
+
+    output = subprocess.check_output(["crysol", "-v"])
+    installedAtsasVersion = output[14:19]
+    if installedAtsasVersion != saspyVersion:
+        msg = "\nSASpy and ATSAS versions do not match.\n\n"
+        msg += "Currently installed:\n"
+        msg += "SASpy " + saspyVersion + "\n"
+        msg += "ATSAS " + installedAtsasVersion + "\n\n"
+        msg += "SASpy and ATSAS versions should be equivalent.\nPlease update accordingly."
+        return msg 
+    return "OK"
+
+cmd.extend("checkAtsasVersion", checkAtsasVersion)
+ 
 #run crysol in fit mode
 def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
     if False == os.path.isfile(SaxsDataFileName):
@@ -796,10 +832,6 @@ def supalm(template, toalign):
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
         systemCommand(['supalm', '-o', outfn, '--prog2=crysol'] + [f1, f2])
-        #reloading file approach, needed for ATSAS 2.7.1 
-        #cmd.delete(toalign)
-        #cmd.load(outfn) 
-        #and the following works properly for ATSAS 2.7.2
         tmat = readTransformationMatrixFromPdbRemark(outfn)
         nsd = readNSDFromSupalmPdb(outfn)
         cmd.transform_selection(toalign, tmat)
@@ -834,6 +866,12 @@ def updateCurrentDat(newDatFile):
     global currentDat
     currentDat=[]
     currentDat.append(newDatFile)
+
+def allToRefAlign(ref):
+    for i in cmd.get_object_list():
+        cmd.align(i, ref);
+
+cmd.extend("allToRefAlign", allToRefAlign);
 
 def parseEulerAngles(filename):
     '''Parse Euler angles and translations 
