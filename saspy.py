@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.7.2"
+saspyVersion = "2.8.0"
 currentDat = []
 modelingRuns = 0
 datViewer = Tkinter.StringVar()
@@ -306,21 +306,32 @@ class SASpy:
 
         self.notebook.setnaturalsize()
 
-        self.versionSanityCheck()
+        self.ATSAS_sanityCheck()
 
 #GUI FUNCTIONS
 
-    def errorWindow(self,title, msg):
+    def errorWindow(self, title, msg):
         tkMessageBox.showerror(title,
-                               "ERROR "+ msg, 
+                               "ERROR " + msg, 
                                parent=self.parent)
         return
 
-    def versionSanityCheck(self):
+    def notificationWindow(self, title, msg):
+        tkMessageBox.showinfo(title, msg,
+                               parent=self.parent)
+        return
+
+    def ATSAS_sanityCheck(self):
+        msg = checkAtsasBin()
+        if "OK" != msg:
+            self.errorWindow("ERROR", msg)
+            self.execute("Quit") 
+            return
+         
         msg = checkAtsasVersion()
         if "OK" != msg:
             self.errorWindow("ERROR", msg)
-            self.execute("Quit");
+            self.execute("Quit")
         return
 
     def createModelSelectionWidget(self):
@@ -674,23 +685,44 @@ def predcrysol(models, prefix=defprefix, param = " "):
 
 cmd.extend("predcrysol", predcrysol)
 
-def checkAtsasVersion():
-    '''Check if ATSAS binaries are available on PATH and 
-       if the installed ATSAS version matches what SASpy expects'''
+def checkAtsasBin():
+    '''Check if ATSAS binaries are available on PATH''' 
     try: 
         status = subprocess.call(["crysol", "-v"])
-    except:
-        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS."
+    except OSError:
+        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS.\n"
+    return "OK"
 
-    output = subprocess.check_output(["crysol", "-v"])
-    installedAtsasVersion = output[14:19]
+def checkAtsasVersion():
+    '''Check if the installed ATSAS version matches what SASpy expects'''
+    try:
+        output = subprocess.check_output(["crysol", "-v"], 
+                                    stderr=subprocess.STDOUT)
+    except OSError:
+        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS."
+    except subprocess.CalledProcessError as exc:
+        msg = "\nError running `crysol -v` to check the ATSAS version.\n\n"
+        msg += "Check that ATSAS is properly installed.\n\n"
+        msg += "Output of the failed command:\n"
+        msg += exc.output
+        return msg
+
+    versionMatch = re.match(r"crysol, ATSAS v?(\S+)\s+", output)
+    if versionMatch is None:
+        msg = "\nCould not parse the ATSAS version from `crysol -v` output:\n\n"
+        msg += output
+        return msg
+
+    installedAtsasVersion = versionMatch.group(1)
+    msg = "Found binaries for ATSAS version " + installedAtsasVersion
+    message(msg)
     if installedAtsasVersion != saspyVersion:
         msg = "\nSASpy and ATSAS versions do not match.\n\n"
         msg += "Currently installed:\n"
         msg += "SASpy " + saspyVersion + "\n"
         msg += "ATSAS " + installedAtsasVersion + "\n\n"
         msg += "SASpy and ATSAS versions should be equivalent.\nPlease update accordingly."
-        return msg 
+        return msg
     return "OK"
 
 cmd.extend("checkAtsasVersion", checkAtsasVersion)
@@ -705,8 +737,6 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
     Rg = -9999
     chi2 = -9999
     
-    
-
     #write all models into a single file  
     selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
