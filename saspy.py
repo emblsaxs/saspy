@@ -2,7 +2,7 @@
 '''
 SASpy - ATSAS PLUGIN FOR PYMOL
 
-(c) 2015-2016 A.PANJKOVICH FOR ATSAS TEAM AT EMBL-HAMBURG.
+(c) 2015-2017 A.PANJKOVICH FOR ATSAS TEAM AT EMBL-HAMBURG.
 '''
 import os
 import sys
@@ -46,12 +46,11 @@ cwd = Tkinter.StringVar()
 cwd.set(os.getcwd())
 
 from sys import platform
+datViewer.set("sasplot") #on linux
 if "win32" == platform:
     datViewer.set("sasplotqt")
 if "darwin" == platform:
     datViewer.set("/Applications/ATSAS/sasplot.app")
-else:
-    datViewer.set("sasplot") #on linux
 
 def __init__(self):
     """ SASpy - ATSAS Plugin for PyMOL
@@ -171,9 +170,9 @@ class SASpy:
         description  = "SASpy - ATSAS Plugin for PyMOL\n"
         description += "ATSAS " + saspyVersion + "\n\n"
         description += "European Molecular Biology Laboratory\n"
-        description += "Hamburg Outstation, ATSAS Team, 2015-2016.\n"
+        description += "Hamburg Outstation, ATSAS Team, 2015-2017.\n"
 
-        
+
         w = Tkinter.Label(self.dialog.interior(),
                           text = description,
                           background = 'white', foreground = 'blue')
