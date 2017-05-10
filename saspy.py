@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.0"
+saspyVersion = "2.8.1"
 currentDat = []
 modelingRuns = 0
 datViewer = Tkinter.StringVar()
@@ -330,7 +330,6 @@ class SASpy:
         msg = checkAtsasVersion()
         if "OK" != msg:
             self.errorWindow("ERROR", msg)
-            self.execute("Quit")
         return
 
     def createModelSelectionWidget(self):
