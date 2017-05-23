@@ -465,11 +465,17 @@ class SASpy:
         #models can not contain the underscore character '_'
         #this is a Pmw limitation, but PyMOL does add such
         #characters often
+        #remove dots as well, it confuses CRYSOL 
         initialList = cmd.get_object_list()
         outputList = list();
         for m in initialList:
             if '_' in m:
                 newName = m.translate(None,"_")
+                cmd.set_name(m,newName)
+                message("WARNING Renaming model \'"+m+ "\' to \'"+ newName+"\'")
+                m = newName
+            if '.' in m:
+                newName = m.translate(None,".")
                 cmd.set_name(m,newName)
                 message("WARNING Renaming model \'"+m+ "\' to \'"+ newName+"\'")
                 m = newName
