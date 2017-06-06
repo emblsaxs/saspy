@@ -201,6 +201,7 @@ class SASpy:
                                     selectmode = 'single')
         self.crymodebut.grid(sticky='we', row=2, column=0, padx=5, pady=2)
         self.crymodebut.add('predict')
+        #self.crymodebut.add('simulate')
         self.crymodebut.add('fit')
         self.crymodebut.setvalue('predict')
 
@@ -218,13 +219,13 @@ class SASpy:
 #        self.notebook.setnaturalsize(pageNames=fn)
 
         #alpraxin tab
-        alpraxinTab = self.createTab("alpraxin", "Position a structure such that its principal intertia\nvectors are aligned with the coordinate axis.\nPlease select one model.")
+        alpraxinTab = self.createTab("alpraxin", "Position a structure at the origin such that its principal\ninertia vectors are aligned with the coordinate axis.\nPlease select one or more models.")
 
         #supalm tab
         supalmTab = self.createTab('supalm', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
 
         #sasref tab
-        sasreftab = self.createTab("sasref", "Quaternary structure modeling against solution scattering data.\nPlease select multiple models (rigid bodies) and a SAXS .dat file.")
+        sasreftab = self.createTab("sasref", "Quaternary structure modeling against solution scattering data.\nPlease select multiple models (rigid bodies) and a SAXS .dat file.\nRecommendation: execute alpraxin before refinement.")
         saxsfn_ent = Pmw.EntryField(sasreftab,
                                     label_text = 'SAXS .dat file:',
                                     labelpos='ws',
@@ -406,7 +407,7 @@ class SASpy:
 
     def submitSaspyJob(self, procType, models = []):
         if "alpraxin" == procType:
-            alpraxin(models[0])
+            alpraxin(models)
             return
         if "crysol" == procType:
             self.crysol(models)
@@ -435,10 +436,10 @@ class SASpy:
 
         #some procedures need an exact number of models selected
         expect_dict = { #expected number of models
-                     'alpraxin':1,
                      'damdisplay':1,
                      'supalm':2,
         #other procedures need a minimum number of selected models
+                     'alpraxin':11,
                      'sreflex':11, #subtract ten to obtain min expected
                      'crysol':11,
                      'sasref':12,
@@ -465,7 +466,7 @@ class SASpy:
         #models can not contain the underscore character '_'
         #this is a Pmw limitation, but PyMOL does add such
         #characters often
-        #remove dots as well, it confuses CRYSOL 
+        #dots are also removed, as they confuse crysol
         initialList = cmd.get_object_list()
         outputList = list();
         for m in initialList:
@@ -559,6 +560,8 @@ class SASpy:
             message("CRYSOL will be executed for a complex")
             message("made of the following models: "+repr(selection))
         crymode = self.crysolmode.get()
+        if 'simulate' == crymode:
+            return updateCurrentDat(simulateScattering(selection))
         if 'predict' == crymode:
             return updateCurrentDat(predcrysol(selection))
         elif 'fit' == crymode:
@@ -668,11 +671,36 @@ def parseCrysolLog (logFileName):
     rf.close()
     return {'chi2':chi2, 'Rg':Rg}
 
+def simulateScattering(models, prefix=defprefix, param = " "):
+    '''Use CRYSOL and ADDERRORS to simulate scattering''' 
+    #write all models into a single file  
+    selection = " or ".join(models)
+    Rg = -9999
+    df = 'unknown'
+    with TemporaryDirectory() as tmpdir:
+        pdbfn = writePdb(selection)
+        systemCommand(["crysol", "-ns", "800"] + param.split() + [pdbfn])
+        fid = pdbfn.replace(".pdb", "")
+        result = parseCrysolLog(fid+"00.log")
+        Rg = result['Rg']
+        tmpint = fid + "00.int"
+        tmpout = fid + ".dat"
+        systemCommand(["adderrors", tmpint, "-o", tmpout])
+        df = tmpdir.move_out_numbered(tmpout, fid, '.dat')
+
+    message("CRYSOL Theoretical Rg = " + repr(Rg))
+    message( ".dat file written to " + df)
+    openSingleDatFile(datViewer.get(), df)
+    return df
+
+cmd.extend("simulateScattering", simulateScattering)
+
 #run crysol in predictive mode for a given selection
 def predcrysol(models, prefix=defprefix, param = " "):
     #write all models into a single file  
     selection = " or ".join(models)
-    Rg = -9999;
+    Rg = -9999
+    df = 'unknown'
     with TemporaryDirectory() as tmpdir:
         #cmd.save(selection, pdbfn)
         pdbfn = writePdb(selection)
@@ -845,11 +873,13 @@ def readTransformationMatrixFromPdbRemark(pdbfn):
         p.append(float (a[i-1]))
     return p
 
-def alpraxin(sel):
+def alpraxin(models):
     """run alpraxin and apply transformation matrix"""
+    sel = " or ".join(models)
     with TemporaryDirectory():
         pdbfn = writePdb(sel, "in_")
         outfn = sel + ".pdb"
+        outfn = outfn.replace(" ", "")
         systemCommand(["alpraxin", "-o", outfn, pdbfn])
         tmat = readTransformationMatrixFromPdbRemark(outfn)
         cmd.transform_selection(sel, tmat)            
