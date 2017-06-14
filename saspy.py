@@ -324,12 +324,14 @@ class SASpy:
     def ATSAS_sanityCheck(self):
         msg = checkAtsasBin()
         if "OK" != msg:
+            message(msg)
             self.errorWindow("ERROR", msg)
             self.execute("Quit") 
             return
          
         msg = checkAtsasVersion()
         if "OK" != msg:
+            message(msg)
             self.errorWindow("ERROR", msg)
         return
 
@@ -720,7 +722,7 @@ cmd.extend("predcrysol", predcrysol)
 def checkAtsasBin():
     '''Check if ATSAS binaries are available on PATH''' 
     try: 
-        status = subprocess.call(["crysol", "-v"])
+        status = subprocess.check_output(["crysol", "-v"])
     except OSError:
         return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS.\n"
     return "OK"
@@ -728,7 +730,7 @@ def checkAtsasBin():
 def checkAtsasVersion():
     '''Check if the installed ATSAS version matches what SASpy expects'''
     try:
-        output = subprocess.check_output(["crysol", "-v"], 
+        output = subprocess.check_output(["crysol", "-v"],
                                     stderr=subprocess.STDOUT)
     except OSError:
         return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS."
@@ -895,12 +897,16 @@ def supalm(template, toalign):
         f1 = writePdb(template)
         f2 = writePdb(toalign, "in_")
         outfn = toalign + ".pdb"
-        systemCommand(['supalm', '-o', outfn, '--prog2=crysol'] + [f1, f2])
+        sargs = ['supalm', '-o', outfn]
+        sargs.append('--prog2=crysol')
+        sargs.append('--enantiomorphs=N')
+        sargs.append(f1)
+        sargs.append(f2)
+        systemCommand(sargs)
         tmat = readTransformationMatrixFromPdbRemark(outfn)
         nsd = readNSDFromSupalmPdb(outfn)
         cmd.transform_selection(toalign, tmat)
         message("SUPALM NSD = " + repr(nsd))
-
 cmd.extend("supalm", supalm)
 
 def openSingleDatFile(viewer, fn):
