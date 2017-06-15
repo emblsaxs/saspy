@@ -220,6 +220,15 @@ class SASpy:
 
         #alpraxin tab
         alpraxinTab = self.createTab("alpraxin", "Position a structure at the origin such that its principal\ninertia vectors are aligned with the coordinate axis.\nPlease select one or more models.")
+        self.enantiobut = Pmw.RadioSelect(alpraxinTab,
+                                    buttontype='radiobutton',
+                                    labelpos='w',
+                                    label_text="Produce enantiomorph as new model:",
+                                    selectmode = 'single')
+        self.enantiobut.grid(sticky='we', row=2, column=0, padx=5, pady=2)
+        self.enantiobut.add('no')
+        self.enantiobut.add('yes')
+        self.enantiobut.setvalue('no')            
 
         #supalm tab
         supalmTab = self.createTab('supalm', 'Superimposition of models and calculation of\nnormalized spatial discrepancy (NSD).\nPlease select two models.')
@@ -245,7 +254,6 @@ class SASpy:
         self.sasrefmodebut.add('local')
         self.sasrefmodebut.add('global')
         self.sasrefmodebut.setvalue('local')
-
 
         # sreflex tab
         sreflexTab = self.createTab("sreflex", "Model refinement based on SAXS data and normal mode analysis.\nPlease select models and a SAXS .dat file.")
@@ -409,7 +417,7 @@ class SASpy:
 
     def submitSaspyJob(self, procType, models = []):
         if "alpraxin" == procType:
-            alpraxin(models)
+            alpraxin(models, self.enantiobut.getvalue())
             return
         if "crysol" == procType:
             self.crysol(models)
@@ -875,16 +883,26 @@ def readTransformationMatrixFromPdbRemark(pdbfn):
         p.append(float (a[i-1]))
     return p
 
-def alpraxin(models):
+def alpraxin(models, enantiomode):
     """run alpraxin and apply transformation matrix"""
     sel = " or ".join(models)
+        
     with TemporaryDirectory():
         pdbfn = writePdb(sel, "in_")
         outfn = sel + ".pdb"
         outfn = outfn.replace(" ", "")
-        systemCommand(["alpraxin", "-o", outfn, pdbfn])
-        tmat = readTransformationMatrixFromPdbRemark(outfn)
-        cmd.transform_selection(sel, tmat)            
+        aargs = ["alpraxin", pdbfn]
+        if ('yes' == enantiomode):
+            message("ALPRAXIN will create enantiomer as new model")
+            aargs.append("--enantiomorph=Y")
+        aargs.append("-o")
+        aargs.append(outfn)
+        systemCommand(aargs)
+        if ('no' == enantiomode):
+            tmat = readTransformationMatrixFromPdbRemark(outfn)
+            cmd.transform_selection(sel, tmat)            
+        if('yes' == enantiomode):
+            cmd.load(outfn, "enantiomorph_"+sel)
 
 cmd.extend("alpraxin", alpraxin)
 
