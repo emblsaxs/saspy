@@ -38,19 +38,11 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.1"
+saspyVersion = "2.8.2"
 currentDat = []
 modelingRuns = 0
-datViewer = Tkinter.StringVar()
-cwd = Tkinter.StringVar()
-cwd.set(os.getcwd())
 
 from sys import platform
-datViewer.set("sasplot") #on linux
-if "win32" == platform:
-    datViewer.set("sasplotqt")
-if "darwin" == platform:
-    datViewer.set("/Applications/ATSAS/sasplot.app")
 
 def __init__(self):
     """ SASpy - ATSAS Plugin for PyMOL
@@ -161,6 +153,15 @@ class SASpy:
         self.crysolmode    = Tkinter.StringVar()
         self.crysolmode.set('predict')
         self.prefix        = Tkinter.StringVar()
+
+        self.datViewer = Tkinter.StringVar()
+        self.cwd = Tkinter.StringVar()
+        self.cwd.set(os.getcwd())
+        self.datViewer.set("sasplot") #on linux
+        if "win32" == platform:
+            self.datViewer.set("sasplotqt")
+        if "darwin" == platform:
+            self.datViewer.set("/Applications/ATSAS/sasplot.app")
 
         self.warnLabel = Tkinter.Label( self.dialog.interior(),
                                     anchor='center',
@@ -290,7 +291,7 @@ class SASpy:
         svi_ent = Pmw.EntryField(configTab,
                                     label_text = 'SAXS viewer:',
                                     labelpos='ws',
-                                    entry_textvariable = datViewer)
+                                    entry_textvariable = self.datViewer)
         svi_but = Tkinter.Button(configTab, text = 'Select SAXS viewer',
                                     command = self.getSAXSViewer)
         svi_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
@@ -300,7 +301,7 @@ class SASpy:
         wd_ent = Pmw.EntryField(configTab,
                                     label_text = 'Current working dir:',
                                     labelpos='ws',
-                                    entry_textvariable = cwd)
+                                    entry_textvariable = self.cwd)
         #wd_ent.grid(sticky='w', row=2, column=0, columnspan=3, padx=5, pady=2)
         wd_ent.grid(sticky='w', row=2, column=0, padx=5, pady=2)
         scd_but = Tkinter.Button(configTab, text = 'Select working directory',
@@ -378,7 +379,7 @@ class SASpy:
         self.datmodebut.setvalue(mode)
 
     def submitJobAsThread(self, procType, models= []):
-        viewer = datViewer.get()
+        viewer = self.datViewer.get()
         #check how many threads from this plugin are running
         running = self.checkAtsasThreads()
         if running == self.maxThreads:
@@ -527,15 +528,14 @@ class SASpy:
                                     parent=self.parent)
 
         else:
-            openDatFile(datViewer.get(), currentDat)
+            openDatFile(self.datViewer.get(), currentDat)
         return
 
     def getSAXSViewer(self):
-        global datViewer
         file_name = tkFileDialog.askopenfilename(
             title='SAXS viewer', initialdir='',
             parent=self.parent)
-        datViewer.set(file_name)
+        self.datViewer.set(file_name)
         return
 
     def setWorkingDirectory(self):
@@ -543,44 +543,48 @@ class SASpy:
             title='Set working directory', initialdir='',
             parent=self.parent)
         cmd.cd(newWorkDir)
-        cwd.set(newWorkDir)
+        self.cwd.set(newWorkDir)
         message("Working directory changed to: " + newWorkDir);
         return
 
     def getSAXSFile(self):
         if 'crysol' == self.procedure:
             self.setCrysolMode('fit')
-        file_name = tkFileDialog.askopenfilename(
-            title='SAXS File', initialdir=cwd,
-            filetypes=[('saxs data files', '*.dat'), ('all files', '*')],
-            parent=self.parent)
+        opts = {}
+        opts['filetypes'] = [('SAXS .dat files','.dat'),('all files','.*')]
+        file_name = tkFileDialog.askopenfilename(**opts)
         self.saxsfn.set(file_name)
         return
 
     def tabSelection(self, pagename):
         #refresh each time a tab is selected
-        cwd.set(os.getcwd()) #I don't know how to refresh this if the 
+        self.cwd.set(os.getcwd()) #I don't know how to refresh this if the 
                              #user just calls 'cd'
         self.procedure = pagename
         return
 
     def crysol(self, selection, param=""):
         #wrapper for the different crysol modes
+        df = 'empty'
         if 1 < len(selection):
             message("CRYSOL will be executed for a complex")
             message("made of the following models: "+repr(selection))
         crymode = self.crysolmode.get()
         if 'simulate' == crymode:
-            return updateCurrentDat(simulateScattering(selection))
+            df = simulateScattering(selection)
         if 'predict' == crymode:
-            return updateCurrentDat(predcrysol(selection))
+            df = predcrysol(selection)
         elif 'fit' == crymode:
             saxsfn = self.saxsfn.get()
             if False == os.path.isfile(saxsfn):
                 self.errorWindow("FILE NOT FOUND",
                              "SAXS file \'"+saxsfn+"\' NOT FOUND.");
                 return
-            return updateCurrentDat(fitcrysol(saxsfn, selection))
+            df = fitcrysol(saxsfn, selection)
+        if 'empty' != df: 
+            openSingleDatFile(self.datViewer.get(), df)
+            updateCurrentDat(df)
+        return
             
     def execute(self, cmd):
         """ Run the cmd represented by the button clicked by user.
@@ -700,7 +704,6 @@ def simulateScattering(models, prefix=defprefix, param = " "):
 
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message( ".dat file written to " + df)
-    openSingleDatFile(datViewer.get(), df)
     return df
 
 cmd.extend("simulateScattering", simulateScattering)
@@ -722,7 +725,6 @@ def predcrysol(models, prefix=defprefix, param = " "):
 
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message( ".int file written to " + df)
-    openSingleDatFile(datViewer.get(), df)
     return df
 
 cmd.extend("predcrysol", predcrysol)
@@ -801,7 +803,6 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
     message( ".fit file written to " + df)
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message("CRYSOL Chi-square = " + repr(chi2))
-    openSingleDatFile(datViewer.get(), df)
     return df
 
 cmd.extend("fitcrysol", fitcrysol)
