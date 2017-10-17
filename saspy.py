@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.2"
+saspyVersion = "2.9.0"
 currentDat = []
 modelingRuns = 0
 
@@ -321,7 +321,7 @@ class SASpy:
 
     def errorWindow(self, title, msg):
         tkMessageBox.showerror(title,
-                               "ERROR " + msg, 
+                               "ERROR\n" + msg, 
                                parent=self.parent)
         return
 
@@ -331,14 +331,15 @@ class SASpy:
         return
 
     def ATSAS_sanityCheck(self):
-        msg = checkAtsasBin()
-        if "OK" != msg:
+        msg = checkAtsasVersion()
+        if "NOBIN" == msg:
+            msg = "ATSAS binaries not found, please install ATSAS and/or "
+            msg += "update the binary PATH on your ~/pymolrc.pml file.\n"
+            msg += "SASpy will quit now."
             message(msg)
             self.errorWindow("ERROR", msg)
-            self.execute("Quit") 
+            self.execute("Quit")
             return
-         
-        msg = checkAtsasVersion()
         if "OK" != msg:
             message(msg)
             self.errorWindow("ERROR", msg)
@@ -729,21 +730,18 @@ def predcrysol(models, prefix=defprefix, param = " "):
 
 cmd.extend("predcrysol", predcrysol)
 
-def checkAtsasBin():
-    '''Check if ATSAS binaries are available on PATH''' 
-    try: 
-        status = subprocess.check_output(["crysol", "-v"])
-    except OSError:
-        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS.\n"
-    return "OK"
-
 def checkAtsasVersion():
     '''Check if the installed ATSAS version matches what SASpy expects'''
     try:
-        output = subprocess.check_output(["crysol", "-v"],
-                                    stderr=subprocess.STDOUT)
-    except OSError:
-        return "\nATSAS executables not found in PATH.\n\nPlease install ATSAS."
+        from subprocess import DEVNULL
+    except ImportError:
+        DEVNULL = os.open(os.devnull, os.O_RDWR)
+    output = "emtpy"
+    try: 
+        output = subprocess.check_output(["crysol", "-v"], 
+        stdin=DEVNULL, stderr=subprocess.STDOUT)
+    except OSError as e:
+       return "NOBIN"
     except subprocess.CalledProcessError as exc:
         msg = "\nError running `crysol -v` to check the ATSAS version.\n\n"
         msg += "Check that ATSAS is properly installed.\n\n"
