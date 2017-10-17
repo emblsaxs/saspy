@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.9.0"
+saspyVersion = "2.8.2"
 currentDat = []
 modelingRuns = 0
 
