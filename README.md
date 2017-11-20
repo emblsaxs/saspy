@@ -19,14 +19,14 @@ For more details:
 
 ## Please use PyMOL 2.0 or the Open-Source version ##
 
-# PyMOL 2.0 #
+### PyMOL 2.0 ###
 * PyMOL version 2.0 has been tested and works properly with SASpy.
 * It can be downloaded and installed free of charge from:
 	* https://pymol.org/2/#download
 * It is available for Linux, Mac and Windows.
 
 
-# Open-Source PyMOL #
+### Open-Source PyMOL ###
 
 Open-source PyMOL installations:
 
