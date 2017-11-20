@@ -18,8 +18,18 @@ For more details:
   * https://pymolwiki.org/index.php/Pymolrc
 
 
-## Please use PyMOL Open-Source versions, others may not work properly ##
-SASpy works best with the free of charge and open-source PyMOL installations:
+## Please use PyMOL 2.0 or the Open-Source version##
+
+# PyMOL 2.0:#
+* PyMOL version 2.0 has been tested and works properly with SASpy.
+* It can be downloaded and installed free of charge from:
+	* https://pymol.org/2/#download
+* It is available for Linux, Mac and Windows.
+
+
+#Open-Source PyMOL#
+
+Open-source PyMOL installations:
 
 * Linux - on your terminal type: > sudo apt-get install pymol
   * apt-get is for Debian/Ubuntu, please adapt depending on your distro, more details at:
