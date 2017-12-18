@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.2"
+saspyVersion = "2.8.3"
 currentDat = []
 modelingRuns = 0
 
@@ -157,11 +157,11 @@ class SASpy:
         self.datViewer = Tkinter.StringVar()
         self.cwd = Tkinter.StringVar()
         self.cwd.set(os.getcwd())
-        self.datViewer.set("sasplot") #on linux
+        self.datViewer.set("primus") #on linux
         if "win32" == platform:
-            self.datViewer.set("sasplotqt")
+            self.datViewer.set("primusqt")
         if "darwin" == platform:
-            self.datViewer.set("/Applications/ATSAS/sasplot.app")
+            self.datViewer.set("/Applications/ATSAS/primus.app")
 
         self.warnLabel = Tkinter.Label( self.dialog.interior(),
                                     anchor='center',
@@ -707,7 +707,7 @@ def simulateScattering(models, prefix=defprefix, param = " "):
     message( ".dat file written to " + df)
     return df
 
-cmd.extend("simulateScattering", simulateScattering)
+#cmd.extend("simulateScattering", simulateScattering)
 
 #run crysol in predictive mode for a given selection
 def predcrysol(models, prefix=defprefix, param = " "):
@@ -786,19 +786,22 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
         pdbfn = writePdb(selection)
         systemCommand(["crysol"] + param.split() + [pdbfn, fileFullPath])
         fid = pdbfn.replace(".pdb", "")
-        result = parseCrysolLog(fid+"00.log")
+        logfile = fid+"00.log"
+        result = parseCrysolLog(logfile)
         Rg = result['Rg']
         chi2 = result['chi2']
         df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
+        logfn = tmpdir.move_out_numbered(logfile, fid, '.log')
 
+        message( ".log file written to " + logfile)
+        message( ".fit file written to " + df)
         #if there is more than one model, we are evaluating a complex
         #in this case we should provide the coordinates of the complex
         #to the user.
         if 1 < len(models):
             pdbfn=tmpdir.move_out_numbered(pdbfn, fid, '.pdb')
             message( ".pdb file written to " + pdbfn)
-
-    message( ".fit file written to " + df)
+         
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message("CRYSOL Chi-square = " + repr(chi2))
     return df
@@ -807,7 +810,7 @@ cmd.extend("fitcrysol", fitcrysol)
 
 #run sreflex
 def sreflex(SaxsDataFileName, models,
-            viewer='sasplot', prefix=defprefix):
+            viewer='primus', prefix=defprefix):
     global modelingRuns
     global currentDat
     if False == os.path.isfile(SaxsDataFileName):
@@ -1023,7 +1026,7 @@ def anglesToTTTMat(movement):
     output.append(1.0)
     return output
 
-def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='sasplot'):
+def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='primus'):
     '''Execute SASREF and apply obtained transformations to subunits'''
 
     global modelingRuns
@@ -1124,8 +1127,13 @@ def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='sasplot'):
  
         with open(comfn, 'w') as commandfile:
             commandfile.write(sc)
-        with open(comfn, 'r') as commandfile:
-            systemCommand(['sasref'], stdin=commandfile)
+        if "win32" != platform:
+            with open(comfn, 'r') as commandfile:
+                systemCommand(['sasref'], stdin=commandfile)
+            #somehow this doesn't work on Windows with PyMOL 2.0
+            #there's an issue with the underlying libraries...            
+        else:
+            os.system('sasref < setup_sasref.com')
 
         outpdb = prefix + ".pdb" 
         #read and apply movements 
