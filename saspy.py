@@ -2,7 +2,7 @@
 '''
 SASpy - ATSAS PLUGIN FOR PYMOL
 
-(c) 2015-2017 A.PANJKOVICH FOR ATSAS TEAM AT EMBL-HAMBURG.
+(c) 2015-2018 A.PANJKOVICH FOR ATSAS TEAM AT EMBL-HAMBURG.
 '''
 import os
 import sys
@@ -38,7 +38,7 @@ except ImportError:
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.3"
+saspyVersion = "2.8.4"
 currentDat = []
 modelingRuns = 0
 
