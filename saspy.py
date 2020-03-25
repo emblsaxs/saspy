@@ -2,7 +2,7 @@
 '''
 SASpy - ATSAS PLUGIN FOR PYMOL
 
-(c) 2015-2018 A.PANJKOVICH FOR ATSAS TEAM AT EMBL-HAMBURG.
+(c) 2015-2019 A.PANJKOVICH AND H.MERTENS FOR ATSAS TEAM AT EMBL-HAMBURG.
 '''
 import os
 import sys
@@ -11,34 +11,75 @@ import time
 import shutil
 import string
 import math
-import Tkinter
-import tkSimpleDialog
-import tkMessageBox
-import tkFileDialog
+
+try:
+    import Tkinter as tkinter # python 2
+    import tkSimpleDialog as simpledialog
+    import tkMessageBox as messagebox
+    import tkFileDialog as filedialog
+except ImportError:
+    print('Warning: pymol compatible tkinter library (python 2) not found.')
+    pass
+    try:
+        from tkinter import *
+        import tkinter # python 3
+        import tkinter.simpledialog as simpledialog
+        import tkinter.messagebox as messagebox
+        import tkinter.filedialog as filedialog
+        print('Message: pymol compatible tkinter library (python 3) found.')
+    except ImportError:
+        print('Warning: pymol compatible tkinter library (python 3) not found.')
+        sys.exit(1)
+
 import tempfile
 import threading
 import subprocess
 import itertools
+
 
 # pymol lib
 try:
     from pymol import cmd
     from pymol.cgo import *
 except ImportError:
-    print 'Warning: pymol library cmd not found.'
+    print('Warning: pymol library cmd not found.')
     sys.exit(1)
 
 # external lib
 try:
     import Pmw
 except ImportError:
-    print 'Warning: failed to import Pmw. Exit ...'
+    print('Warning: failed to import Pmw. Exit ...')
     sys.exit(1)
+
+## Check the PYTHON version used by PYMOL
+pymolVersion = str(sys.version)
+print('PYTHON VERSION: ', pymolVersion)
+pythonVersion = 0
+
+if pymolVersion.startswith('3'): 
+    print(
+    '''
+    ===================================================================
+    PYMOL version based on python3, compatible saspy plugin identified!
+    ===================================================================
+    '''
+         )
+    pythonVersion = 3
+else:
+    print(
+    '''
+    ===================================================================
+    PYMOL version based on python2, compatible saspy plugin identified!
+    ===================================================================
+    '''
+         )
+    pythonVersion = 2
 
 ## Plugin initialization
 
 #global variables
-saspyVersion = "2.8.4"
+saspyVersion = "3.1.0"
 currentDat = []
 modelingRuns = 0
 
@@ -147,23 +188,25 @@ class SASpy:
         self.atsasThreads  = []
         self.maxThreads    = 1
         self.procedure     = 'empty'
-        self.saxsfn        = Tkinter.StringVar()
-        self.sasrefmode    = Tkinter.StringVar()
+        self.saxsfn        = tkinter.StringVar()
+        self.sasrefmode    = tkinter.StringVar()
         self.sasrefmode.set('local')
-        self.crysolmode    = Tkinter.StringVar()
+        self.crysolmode    = tkinter.StringVar()
         self.crysolmode.set('predict')
-        self.prefix        = Tkinter.StringVar()
+        self.prefix        = tkinter.StringVar()
 
-        self.datViewer = Tkinter.StringVar()
-        self.cwd = Tkinter.StringVar()
+        self.datViewer = tkinter.StringVar()
+        self.cwd = tkinter.StringVar()
         self.cwd.set(os.getcwd())
         self.datViewer.set("primus") #on linux
         if "win32" == platform:
             self.datViewer.set("primusqt")
         if "darwin" == platform:
-            self.datViewer.set("/Applications/ATSAS/primus.app")
+            self.datViewer.set("primus")
+            # OLD default below (cannot be used if installation is elsewhere):
+            #self.datViewer.set("/Applications/ATSAS/primus.app")
 
-        self.warnLabel = Tkinter.Label( self.dialog.interior(),
+        self.warnLabel = tkinter.Label( self.dialog.interior(),
                                     anchor='center',
                                     fg ="red",
         text = 'No models found. Please open/load structures in PyMOL to proceed.')
@@ -174,12 +217,12 @@ class SASpy:
         description += "Hamburg Outstation, ATSAS Team, 2015-2017.\n"
 
 
-        w = Tkinter.Label(self.dialog.interior(),
+        w = tkinter.Label(self.dialog.interior(),
                           text = description,
                           background = 'white', foreground = 'blue')
         w.pack(expand = 1, fill = 'both', padx = 10, pady = 5)
 
-        self.procLabel = Tkinter.Label( self.dialog.interior(),
+        self.procLabel = tkinter.Label( self.dialog.interior(),
                                         anchor='w',
                                         text = '1. Choose procedure:')
         self.procLabel.pack(fill='both', expand=True, padx=10, pady=5)
@@ -210,10 +253,22 @@ class SASpy:
                                     label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
-        saxsfn_but = Tkinter.Button(crysolTab, text = 'Browse...',
+        saxsfn_but = tkinter.Button(crysolTab, text = 'Browse...',
                                     command = self.getSAXSFile)
         saxsfn_ent.grid(sticky='we', row=3, column=0, padx=5, pady=2)
         saxsfn_but.grid(sticky='we', row=3, column=1, padx=5, pady=2)
+
+        #### TRYING to add explicit hydrogen flag ####
+        self.crycalcbut = Pmw.RadioSelect(crysolTab,
+                                    buttontype='radiobutton',
+                                    labelpos='w',
+                                    label_text="Explicit Hydrogens?",
+                                    selectmode = 'single')
+        self.crycalcbut.grid(sticky='we', row=4, column=0, padx=5, pady=2)
+        self.crycalcbut.add('no')
+        self.crycalcbut.add('yes')
+        self.crycalcbut.setvalue('no')
+
 
         fn = []
         fn.append('crysol')
@@ -240,7 +295,7 @@ class SASpy:
                                     label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
-        saxsfn_but = Tkinter.Button(sasreftab, text = 'Browse...',
+        saxsfn_but = tkinter.Button(sasreftab, text = 'Browse...',
                                     command = self.getSAXSFile)
         saxsfn_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         saxsfn_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
@@ -262,16 +317,16 @@ class SASpy:
                                     label_text = 'SAXS .dat file:',
                                     labelpos='ws',
                                     entry_textvariable=self.saxsfn)
-        saxsfn_but = Tkinter.Button(sreflexTab, text = 'Browse...',
+        saxsfn_but = tkinter.Button(sreflexTab, text = 'Browse...',
                                     command = self.getSAXSFile)
         saxsfn_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         saxsfn_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
 
 
         #dam display tab
-        self.damColor = Tkinter.StringVar();
+        self.damColor = tkinter.StringVar();
         self.damColor.set('white');
-        self.damTrans = Tkinter.StringVar();
+        self.damTrans = tkinter.StringVar();
         self.damTrans.set('0.5');
         damdisplayTab = self.createTab("damdisplay", "Apply a predefined representation to a dummy-atom-model (DAM).\nPlease select one model.")
         damDisplayColorEntry = Pmw.EntryField(damdisplayTab,
@@ -292,7 +347,7 @@ class SASpy:
                                     label_text = 'SAXS viewer:',
                                     labelpos='ws',
                                     entry_textvariable = self.datViewer)
-        svi_but = Tkinter.Button(configTab, text = 'Select SAXS viewer',
+        svi_but = tkinter.Button(configTab, text = 'Select SAXS viewer',
                                     command = self.getSAXSViewer)
         svi_ent.grid(sticky='we', row=3, column=0, padx=5, pady=5)
         svi_but.grid(sticky='we', row=3, column=1, padx=5, pady=5)
@@ -304,7 +359,7 @@ class SASpy:
                                     entry_textvariable = self.cwd)
         #wd_ent.grid(sticky='w', row=2, column=0, columnspan=3, padx=5, pady=2)
         wd_ent.grid(sticky='w', row=2, column=0, padx=5, pady=2)
-        scd_but = Tkinter.Button(configTab, text = 'Select working directory',
+        scd_but = tkinter.Button(configTab, text = 'Select working directory',
                                     command = self.setWorkingDirectory)
         scd_but.grid(sticky='we', row=2, column=1, padx=5, pady=2)
 
@@ -320,13 +375,13 @@ class SASpy:
 #GUI FUNCTIONS
 
     def errorWindow(self, title, msg):
-        tkMessageBox.showerror(title,
+        messagebox.showerror(title,
                                "ERROR\n" + msg, 
                                parent=self.parent)
         return
 
     def notificationWindow(self, title, msg):
-        tkMessageBox.showinfo(title, msg,
+        messagebox.showinfo(title, msg,
                                parent=self.parent)
         return
 
@@ -334,7 +389,7 @@ class SASpy:
         msg = checkAtsasVersion()
         if "NOBIN" == msg:
             msg = "ATSAS binaries not found, please install ATSAS and/or "
-            msg += "update the binary PATH on your ~/pymolrc.pml file.\n"
+            msg += "update the binary PATH in your ~/pymolrc.pml file.\n"
             msg += "SASpy will quit now."
             message(msg)
             self.errorWindow("ERROR", msg)
@@ -364,17 +419,19 @@ class SASpy:
         return counter
 
     def setCrysolMode(self, mode):
-        print "Setting crysol mode to "+mode
+        print("Setting crysol mode to "+mode)
         self.crysolmode.set(mode)
         self.crymodebut.setvalue(mode)
+#        self.crycalc.set(mode)
+#        self.crycalcbut.setvalue(mode)
 
     def setSasrefMode(self, mode):
-        print "Setting sasref mode to "+mode
+        print("Setting sasref mode to "+mode)
         self.sasrefmode.set(mode)
         self.sasrefmodebut.setvalue(mode)
 
     def setDatMode(self, mode):
-        print "Setting open mode to " + mode
+        print("Setting open mode to " + mode)
         global datmode
         datmode.set(mode)
         self.datmodebut.setvalue(mode)
@@ -414,7 +471,7 @@ class SASpy:
                 idx = self.atsasThreads.index(t)
                 t.join()
                 del self.atsasThreads[idx]
-                print "Just removed "+name+" from the list, with index "+repr(idx)
+                print("Just removed "+name+" from the list, with index "+repr(idx))
         return threadsAlive
 
     def submitSaspyJob(self, procType, models = []):
@@ -422,7 +479,8 @@ class SASpy:
             alpraxin(models, self.enantiobut.getvalue())
             return
         if "crysol" == procType:
-            self.crysol(models)
+            self.crysol(models, self.crycalcbut.getvalue())
+#            self.crysol(models)
             return
         if "damdisplay" == procType:
             damdisplay(models[0], self.damColor.get(), self.damTrans.get())
@@ -483,12 +541,40 @@ class SASpy:
         outputList = list();
         for m in initialList:
             if '_' in m:
-                newName = m.translate(None,"_")
+
+    # Python 2 and 3 string table handling:
+
+                if pythonVersion == 3:
+                    try:
+                        newName = m.translate(m.maketrans('', '',"_"))
+                        pass
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        newName = m.translate(None,"_")
+                        pass
+                    except ValueError:
+                        pass
                 cmd.set_name(m,newName)
                 message("WARNING Renaming model \'"+m+ "\' to \'"+ newName+"\'")
                 m = newName
+
             if '.' in m:
-                newName = m.translate(None,".")
+
+    # Python 2 and 3 string table handling:
+
+                if pythonVersion == 3:
+                    try:
+                        newName = m.translate(m.maketrans('', '',"."))
+                        pass
+                    except ValueError:
+                        pass
+                else:
+                    try:
+                        newName = m.translate(None,"_")
+                    except:
+                        pass
                 cmd.set_name(m,newName)
                 message("WARNING Renaming model \'"+m+ "\' to \'"+ newName+"\'")
                 m = newName
@@ -514,9 +600,9 @@ class SASpy:
 
     def createTab(self, name = 'empty', description = 'empty'):
         page = self.notebook.add(name)
-        tab_struc = Tkinter.LabelFrame(page, text = name)
+        tab_struc = tkinter.LabelFrame(page, text = name)
         tab_struc.pack(fill='both', expand=True, padx=10, pady=10)
-        desc = Tkinter.Label(tab_struc, justify="left", text = description, pady=2)
+        desc = tkinter.Label(tab_struc, justify="left", text = description, pady=2)
         desc.grid(sticky='w', row=0, column=0, columnspan=4, padx=10, pady=10)
         return tab_struc
 
@@ -524,7 +610,7 @@ class SASpy:
         global currentDat
 #        message("About to open current dat file: " + repr(currentDat))
         if 0 == len(currentDat):
-            tkMessageBox.showerror('No curve yet',
+            messagebox.showerror('No curve yet',
                                    'No SAXS intensities have been calculated yet',
                                     parent=self.parent)
 
@@ -533,14 +619,14 @@ class SASpy:
         return
 
     def getSAXSViewer(self):
-        file_name = tkFileDialog.askopenfilename(
+        file_name = filedialog.askopenfilename(
             title='SAXS viewer', initialdir='',
             parent=self.parent)
         self.datViewer.set(file_name)
         return
 
     def setWorkingDirectory(self):
-        newWorkDir = tkFileDialog.askdirectory(
+        newWorkDir = filedialog.askdirectory(
             title='Set working directory', initialdir='',
             parent=self.parent)
         cmd.cd(newWorkDir)
@@ -553,7 +639,7 @@ class SASpy:
             self.setCrysolMode('fit')
         opts = {}
         opts['filetypes'] = [('SAXS .dat files','.dat'),('all files','.*')]
-        file_name = tkFileDialog.askopenfilename(**opts)
+        file_name = filedialog.askopenfilename(**opts)
         self.saxsfn.set(file_name)
         return
 
@@ -571,17 +657,18 @@ class SASpy:
             message("CRYSOL will be executed for a complex")
             message("made of the following models: "+repr(selection))
         crymode = self.crysolmode.get()
+        crycalc = self.crycalcbut.getvalue()
         if 'simulate' == crymode:
             df = simulateScattering(selection)
         if 'predict' == crymode:
-            df = predcrysol(selection)
+            df = predcrysol(crycalc,selection)
         elif 'fit' == crymode:
             saxsfn = self.saxsfn.get()
             if False == os.path.isfile(saxsfn):
                 self.errorWindow("FILE NOT FOUND",
                              "SAXS file \'"+saxsfn+"\' NOT FOUND.");
                 return
-            df = fitcrysol(saxsfn, selection)
+            df = fitcrysol(crycalc, saxsfn, selection)
         if 'empty' != df: 
             openSingleDatFile(self.datViewer.get(), df)
             updateCurrentDat(df)
@@ -591,7 +678,7 @@ class SASpy:
         """ Run the cmd represented by the button clicked by user.
         """
         if cmd == 'OK':
-            print 'is everything OK?'
+            print('is everything OK?')
 
         elif cmd == 'Refresh model list':
             self.refreshModelSelectionWidget()
@@ -604,7 +691,7 @@ class SASpy:
         elif cmd == 'Quit':
             self.checkAtsasThreads()
             for p in self.atsasThreads:
-                print "WARNING, a thread is still running: " + repr(p.name)
+                print("WARNING, a thread is still running: " + repr(p.name))
 
             message('Quit')
             if __name__ == '__main__':
@@ -613,9 +700,9 @@ class SASpy:
                 self.dialog.withdraw()
 
         else:
-            print 'Terminating SASpy Plugin...'
+            print('Terminating SASpy Plugin...')
             self.dialog.withdraw()
-            print 'Done.'
+            print('Done.')
 
 ##################
 # CLI Funtions
@@ -630,7 +717,7 @@ def systemCommand(command, **kwargs):
     return status
 
 def message(text):
-    print "SASpy: "+text
+    print("SASpy: "+text)
     return
 
 def getPlural(n):
@@ -657,18 +744,31 @@ def writePdb(sel, prefix = ""):
     pdbfn = prefix + sel + ".pdb"
     npdbfn = pdbfn.replace(" or ", "");
     npdbfn = npdbfn.replace(" and ", "");
-    npdbfn = npdbfn.translate(None, string.whitespace)
+
+    # Python 2 and 3 string table handling:
+
+    if pythonVersion == 3:
+        try:
+            npdbfn = npdbfn.translate(npdbfn.maketrans('', '', string.whitespace))
+        except ImportError:
+            pass
+    else:
+        try:
+            npdbfn = npdbfn.translate(None, string.whitespace)
+        except ImportError:
+            pass
     cmd.save(npdbfn, sel)
     return npdbfn
 
 #parse crysol log file
 def parseCrysolLog (logFileName):
-    '''Parse Crysol log file, obtain Chi2 and Rg'''
+    '''Parse Crysol log file, obtain Chi2, Rg and eDens'''
     #will not parse crysol_summary.txt, but the .log file 
     #created for each individual run
 
     chi2 = 9999;
     Rg = 9999;
+    eDens = 9999;
 
     position = -1
     counter = 0
@@ -676,101 +776,91 @@ def parseCrysolLog (logFileName):
         for line in rf:
             counter += 1
             if re.match("(.*)Fitting parameters(.*)", line):
-                print "line number: " + repr(counter)
+                print("line number: " + repr(counter))
                 position = counter + 2
             if counter == position:
                 if line[66:73] != "*******":
                     chi2 = float(line[66:73])
             if re.match("(.*)Rg from the slope of net intensity(.*)", line):
                 Rg = float(line[59:65])
+            if re.match("(.*)Average electron density(.*)", line):
+                eDens = float(line[59:66])
     rf.close()
-    return {'chi2':chi2, 'Rg':Rg}
+    return {'chi2':chi2, 'Rg':Rg, 'eDens':eDens}
 
-def simulateScattering(models, prefix=defprefix, param = " "):
+def simulateScattering(crycalc, models, prefix=defprefix, param = " "):
     '''Use CRYSOL and ADDERRORS to simulate scattering''' 
     #write all models into a single file  
     selection = " or ".join(models)
     Rg = -9999
+    eDens = -9999
     df = 'unknown'
     with TemporaryDirectory() as tmpdir:
         pdbfn = writePdb(selection)
-        systemCommand(["crysol", "-ns", "800"] + param.split() + [pdbfn])
+        if ('yes' == crycalc):
+            message("CRYSOL calculation using explicit hydrogens")
+            systemCommand(["crysol", "-eh", "-ns", "800"] + param.split() + [pdbfn])
+        if ('no' == crycalc):
+            systemCommand(["crysol", "-ns", "800"] + param.split() + [pdbfn])
         fid = pdbfn.replace(".pdb", "")
         result = parseCrysolLog(fid+"00.log")
         Rg = result['Rg']
+        eDens = result['eDens']
         tmpint = fid + "00.int"
         tmpout = fid + ".dat"
         systemCommand(["adderrors", tmpint, "-o", tmpout])
         df = tmpdir.move_out_numbered(tmpout, fid, '.dat')
 
     message("CRYSOL Theoretical Rg = " + repr(Rg))
+    message("CRYSOL Average electron density = " + repr(eDens))
     message( ".dat file written to " + df)
     return df
 
 #cmd.extend("simulateScattering", simulateScattering)
 
 #run crysol in predictive mode for a given selection
-def predcrysol(models, prefix=defprefix, param = " "):
+def predcrysol(crycalc ,models, prefix=defprefix, param = " "):
     #write all models into a single file  
+    #crycalc flag for use/non-use of explicit hydrogens
     selection = " or ".join(models)
     Rg = -9999
+    eDens = -9999
     df = 'unknown'
     with TemporaryDirectory() as tmpdir:
         #cmd.save(selection, pdbfn)
         pdbfn = writePdb(selection)
-        systemCommand(["crysol"] + param.split() + [pdbfn])
+        if ('yes' == crycalc):
+            message("CRYSOL calculation using explicit hydrogens")
+            systemCommand(["crysol", "-eh"] + param.split() + [pdbfn])
+        if ('no' == crycalc):
+            systemCommand(["crysol"] + param.split() + [pdbfn])
         fid = pdbfn.replace(".pdb", "")
         result = parseCrysolLog(fid+"00.log")
         Rg = result['Rg']
+        eDens = result['eDens']
         df = tmpdir.move_out_numbered(fid+"00.int", fid, '.int')
 
     message("CRYSOL Theoretical Rg = " + repr(Rg))
+    message("CRYSOL Average electron density = " + repr(eDens))
     message( ".int file written to " + df)
     return df
 
 cmd.extend("predcrysol", predcrysol)
 
 def checkAtsasVersion():
-    '''Check if the installed ATSAS version matches what SASpy expects'''
-    try:
-        from subprocess import DEVNULL
-    except ImportError:
-        DEVNULL = os.open(os.devnull, os.O_RDWR)
-    output = "emtpy"
-    try: 
-        output = subprocess.check_output(["crysol", "-v"], 
-        stdin=DEVNULL, stderr=subprocess.STDOUT)
-    except OSError as e:
-       return "NOBIN"
-    except subprocess.CalledProcessError as exc:
-        msg = "\nError running `crysol -v` to check the ATSAS version.\n\n"
-        msg += "Check that ATSAS is properly installed.\n\n"
-        msg += "Output of the failed command:\n"
-        msg += exc.output
-        return msg
+    '''Check if ATSAS is installed'''
 
-    versionMatch = re.match(r"crysol, ATSAS v?(\S+)\s+", output)
-    if versionMatch is None:
-        msg = "\nCould not parse the ATSAS version from `crysol -v` output:\n\n"
-        msg += output
-        return msg
-
-    installedAtsasVersion = versionMatch.group(1)
-    msg = "Found binaries for ATSAS version " + installedAtsasVersion
-    message(msg)
-    if installedAtsasVersion != saspyVersion:
-        msg = "\nSASpy and ATSAS versions do not match.\n\n"
-        msg += "Currently installed:\n"
-        msg += "SASpy " + saspyVersion + "\n"
-        msg += "ATSAS " + installedAtsasVersion + "\n\n"
-        msg += "SASpy and ATSAS versions should be equivalent.\nPlease update accordingly."
-        return msg
-    return "OK"
+    CHECK_PATH = str(os.getenv('PATH'))
+    if 'ATSAS' in CHECK_PATH:
+        return "OK"
+    else:
+        return "NOBIN"
+    return
 
 cmd.extend("checkAtsasVersion", checkAtsasVersion)
  
 #run crysol in fit mode
-def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
+def fitcrysol(crycalc, SaxsDataFileName, models, prefix = defprefix, param = ""):
     if False == os.path.isfile(SaxsDataFileName):
         message("SAXS .dat file \'"+SaxsDataFileName+"\' not found")
         return
@@ -778,18 +868,24 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
 
     Rg = -9999
     chi2 = -9999
+    eDens = -9999
     
     #write all models into a single file  
     selection = " or ".join(models)
     with TemporaryDirectory() as tmpdir:
         #cmd.save(selection, pdbfn)
         pdbfn = writePdb(selection)
-        systemCommand(["crysol"] + param.split() + [pdbfn, fileFullPath])
+        if ('yes' == crycalc):
+            message("CRYSOL calculation using explicit hydrogens")
+            systemCommand(["crysol", "-eh"] + param.split() + [pdbfn, fileFullPath])
+        if ('no' == crycalc):
+            systemCommand(["crysol"] + param.split() + [pdbfn, fileFullPath])
         fid = pdbfn.replace(".pdb", "")
         logfile = fid+"00.log"
         result = parseCrysolLog(logfile)
         Rg = result['Rg']
         chi2 = result['chi2']
+        eDens = result['eDens']
         df = tmpdir.move_out_numbered(fid+"00.fit", fid, '.fit')
         logfn = tmpdir.move_out_numbered(logfile, fid, '.log')
 
@@ -804,6 +900,7 @@ def fitcrysol(SaxsDataFileName, models, prefix = defprefix, param = ""):
          
     message("CRYSOL Theoretical Rg = " + repr(Rg))
     message("CRYSOL Chi-square = " + repr(chi2))
+    message("CRYSOL Average electron density = " + repr(eDens))
     return df
 
 cmd.extend("fitcrysol", fitcrysol)
@@ -938,7 +1035,10 @@ def openDatFile(viewer, fnlst = []):
         if not os.path.isfile(fn):
             message("ERROR Curve file \'" + fn + "\' not found.")
     if('darwin' == platform):
-        viewerproc = subprocess.Popen(["open"] + ["-a"] + [viewer] + fnlst)       
+            # As of High Sierra OSX the "open -a" call is not needed
+            # Leaving this if/else statement in case needed later
+#        viewerproc = subprocess.Popen(["open"] + ["-a"] + [viewer] + fnlst)       
+        viewerproc = subprocess.Popen([viewer] + fnlst) 
     else:
         viewerproc = subprocess.Popen([viewer] + fnlst) 
  
@@ -1096,7 +1196,7 @@ def sasref(SaxsDataFileName, models = [], mode = 'local', viewer='primus'):
             #tmpdir.copy_in(m, pdbtmpfn);
             #compute amplitudes
             systemCommand(["crysol"] + ["-p"] + [fid] + [pdbtmpfn])
-            print "computed alm for : "+ fid +"\n"
+            print("computed alm for : "+ fid +"\n")
             sc += fid+".alm"+"! subunit " +repr(count)+" amplitudes\n"
             sc += "0.0     ! Initial rotation by alpha\n"
             sc += "0.0     ! Initial rotation by beta\n"
